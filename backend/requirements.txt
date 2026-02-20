@@ -17,5 +17,14 @@ python-dotenv>=1.0.0
 pydantic>=2.5.0
 pydantic-settings>=2.1.0
 
+# HTTP Client
+httpx>=0.26.0
+
+# AI / Google Gemini
+google-genai>=1.0.0
+
+# Background Scheduler
+apscheduler>=3.10.4
+
 # Development (optional)
 httpx>=0.26.0  # For testing

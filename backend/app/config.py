@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     
     # Encryption key for API credentials (Fernet key, 32 bytes base64)
     encryption_key: str = os.getenv("ENCRYPTION_KEY", "")
+
+    # Google Gemini
+    gemini_api_key: str = os.getenv("GEMINI_API_KEY", "")
     
     class Config:
         env_file = ".env"
@@ -40,6 +43,8 @@ def get_settings() -> Settings:
         raise ValueError("JWT_SECRET_KEY environment variable is not set!")
     if not settings.encryption_key:
         raise ValueError("ENCRYPTION_KEY environment variable is not set!")
+    if not settings.gemini_api_key:
+        raise ValueError("GEMINI_API_KEY environment variable is not set!")
     
     return settings
 

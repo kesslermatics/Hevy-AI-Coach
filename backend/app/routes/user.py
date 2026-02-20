@@ -8,6 +8,7 @@ from app.models import User
 from app.schemas import (
     UserResponse, ApiKeyUpdate, ApiKeyResponse,
     YazioCredentialsUpdate, YazioCredentialsResponse,
+    GoalUpdate, GoalResponse,
 )
 from app.dependencies import get_current_user
 from app.encryption import encrypt_value
@@ -26,6 +27,8 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         username=current_user.username,
         has_hevy_key=current_user.hevy_api_key is not None,
         has_yazio=current_user.yazio_email is not None,
+        current_goal=current_user.current_goal,
+        target_weight=current_user.target_weight,
     )
 
 
@@ -100,4 +103,23 @@ async def delete_yazio_credentials(
     return YazioCredentialsResponse(
         message="Yazio credentials removed successfully",
         has_yazio=False
+    )
+
+
+@router.post("/goal", response_model=GoalResponse)
+async def update_goal(
+    data: GoalUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update the user's fitness goal and optional target weight."""
+    current_user.current_goal = data.current_goal
+    current_user.target_weight = data.target_weight
+    db.commit()
+    db.refresh(current_user)
+
+    return GoalResponse(
+        message="Goal updated successfully",
+        current_goal=current_user.current_goal,
+        target_weight=current_user.target_weight,
     )

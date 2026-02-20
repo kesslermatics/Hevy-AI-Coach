@@ -2,8 +2,9 @@
 Pydantic schemas for request/response validation.
 """
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Optional, Any
 from uuid import UUID
+from datetime import date
 
 
 # ============ User Schemas ============
@@ -26,6 +27,8 @@ class UserResponse(BaseModel):
     username: str
     has_hevy_key: bool = False
     has_yazio: bool = False
+    current_goal: Optional[str] = None
+    target_weight: Optional[float] = None
     
     class Config:
         from_attributes = True
@@ -90,3 +93,41 @@ class TokenData(BaseModel):
 class MessageResponse(BaseModel):
     """Generic message response."""
     message: str
+
+
+# ============ Goal Schemas ============
+
+class GoalUpdate(BaseModel):
+    """Schema for updating user goal and target weight."""
+    current_goal: str = Field(..., min_length=1, max_length=100,
+                              description="e.g. Lean Bulk, Cut, Maintain, Recomp")
+    target_weight: Optional[float] = Field(None, gt=0, le=500,
+                                           description="Target weight in kg")
+
+
+class GoalResponse(BaseModel):
+    """Schema for goal update response."""
+    message: str
+    current_goal: Optional[str] = None
+    target_weight: Optional[float] = None
+
+
+# ============ Briefing Schemas ============
+
+class BriefingData(BaseModel):
+    """The AI-generated briefing payload."""
+    readiness_score: int = Field(..., ge=0, le=100)
+    nutrition_review: str
+    workout_suggestion: str
+    daily_mission: str
+
+
+class BriefingResponse(BaseModel):
+    """Schema returned to frontend for today's briefing."""
+    id: UUID
+    date: date
+    briefing_data: Any     # raw JSON from the AI
+    created_at: Any
+
+    class Config:
+        from_attributes = True
