@@ -1,22 +1,22 @@
 import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getTodayBriefing, regenerateBriefing } from '../api/api';
-import type { UserInfo, Briefing, ExerciseReview } from '../api/api';
+import { getTodayBriefing, regenerateBriefing, getSessionReview } from '../api/api';
+import type { UserInfo, Briefing, SessionReviewData, ExerciseReview } from '../api/api';
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
-    ChevronDown, ChevronUp, Trophy, Crosshair, Star
+    Trophy, Crosshair, Star, X
 } from 'lucide-react';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
 
 /* ── CS2 Rank Colors ────────────────────────────────── */
 const RANK_COLORS: Record<number, string> = {
-    0: '#8C8C8C', 1: '#8C8C8C', 2: '#8C8C8C', 3: '#8C8C8C',        // Silver
-    4: '#D4A017', 5: '#D4A017', 6: '#D4A017', 7: '#D4A017',          // Gold Nova
-    8: '#3B82F6', 9: '#3B82F6', 10: '#3B82F6',                       // MG
-    11: '#8B5CF6', 12: '#A855F7', 13: '#A855F7',                     // DMG/LE
-    14: '#EF4444', 15: '#FFD700',                                     // Supreme/Global
+    0: '#8C8C8C', 1: '#8C8C8C', 2: '#8C8C8C', 3: '#8C8C8C',
+    4: '#D4A017', 5: '#D4A017', 6: '#D4A017', 7: '#D4A017',
+    8: '#3B82F6', 9: '#3B82F6', 10: '#3B82F6',
+    11: '#8B5CF6', 12: '#A855F7', 13: '#A855F7',
+    14: '#EF4444', 15: '#FFD700',
 };
 
 const RANK_BG: Record<number, string> = {
@@ -37,6 +37,12 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [regenerating, setRegenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Session review modal state
+    const [modalOpen, setModalOpen] = useState<'last' | 'next' | null>(null);
+    const [sessionReview, setSessionReview] = useState<SessionReviewData | null>(null);
+    const [sessionLoading, setSessionLoading] = useState(false);
+    const [sessionError, setSessionError] = useState<string | null>(null);
 
     const fetchBriefing = async () => {
         setError(null);
@@ -59,6 +65,23 @@ export default function Dashboard() {
             setError(err.message || 'Failed to regenerate');
         } finally {
             setRegenerating(false);
+        }
+    };
+
+    const openSessionModal = async (tab: 'last' | 'next') => {
+        setModalOpen(tab);
+        // Only fetch if we don't have data yet
+        if (!sessionReview) {
+            setSessionLoading(true);
+            setSessionError(null);
+            try {
+                const data = await getSessionReview();
+                setSessionReview(data);
+            } catch (err: any) {
+                setSessionError(err.message || 'Failed to load session review');
+            } finally {
+                setSessionLoading(false);
+            }
         }
     };
 
@@ -102,9 +125,7 @@ export default function Dashboard() {
                 <div className="card-glass p-6 text-center space-y-3">
                     <p className="text-red-400 text-sm">{error}</p>
                     <button onClick={fetchBriefing}
-                        className="btn-gold text-sm px-6 py-2 mx-auto">
-                        Try Again
-                    </button>
+                        className="btn-gold text-sm px-6 py-2 mx-auto">Try Again</button>
                 </div>
             )}
 
@@ -138,15 +159,40 @@ export default function Dashboard() {
                         </div>
                     </div>
 
-                    {/* ─── Last Session Review ─────────────── */}
-                    {data.last_session && (
-                        <LastSessionCard session={data.last_session} />
-                    )}
+                    {/* ─── Workout Suggestion ──────────────── */}
+                    <div className="card-glass p-6">
+                        <div className="flex items-center gap-3 mb-3">
+                            <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-blue-500/10 border-blue-500/30 text-blue-400">
+                                <Dumbbell className="w-5 h-5" />
+                            </div>
+                            <div>
+                                <h3 className="text-sm font-semibold text-cream-50">Workout Suggestion</h3>
+                                <p className="text-xs text-dark-300">Today's training focus</p>
+                            </div>
+                        </div>
+                        <p className="text-cream-200 text-sm leading-relaxed">{data.workout_suggestion}</p>
+                    </div>
 
-                    {/* ─── Next Session ────────────────────── */}
-                    {data.next_session && (
-                        <NextSessionCard session={data.next_session} />
-                    )}
+                    {/* ─── Session Tiles (clickable) ───────── */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <button onClick={() => openSessionModal('last')}
+                            className="card-glass p-5 text-left hover:border-purple-500/40 transition-all duration-200 group cursor-pointer">
+                            <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                                <Trophy className="w-5 h-5 text-purple-400" />
+                            </div>
+                            <h3 className="text-sm font-semibold text-cream-50 mb-1">Last Session</h3>
+                            <p className="text-xs text-dark-300">Review, rankings & progression</p>
+                        </button>
+
+                        <button onClick={() => openSessionModal('next')}
+                            className="card-glass p-5 text-left hover:border-blue-500/40 transition-all duration-200 group cursor-pointer">
+                            <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
+                                <Crosshair className="w-5 h-5 text-blue-400" />
+                            </div>
+                            <h3 className="text-sm font-semibold text-cream-50 mb-1">Next Session</h3>
+                            <p className="text-xs text-dark-300">AI-powered workout plan</p>
+                        </button>
+                    </div>
 
                     {/* ─── Daily Mission ───────────────────── */}
                     <div className="card-glass p-6 border-l-4 border-gold-500">
@@ -160,217 +206,275 @@ export default function Dashboard() {
                     </div>
                 </>
             )}
-        </div>
-    );
-}
 
-/* ═══════════════════════════════════════════════════════
-   LAST SESSION CARD
-   ═══════════════════════════════════════════════════════ */
-
-function LastSessionCard({ session }: { session: NonNullable<Briefing['briefing_data']['last_session']> }) {
-    const [expanded, setExpanded] = useState(true);
-
-    return (
-        <div className="relative rounded-2xl overflow-hidden border border-dark-500/50">
-            {/* Background image */}
-            <div className="absolute inset-0 z-0">
-                <img
-                    src="https://images.unsplash.com/photo-1534438327276-14e5300c3a48?w=800&q=70&auto=format"
-                    alt="" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-dark-900/85 backdrop-blur-sm" />
-            </div>
-
-            {/* Content */}
-            <div className="relative z-10 p-6">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-purple-500/20 border border-purple-500/30 flex items-center justify-center">
-                            <Trophy className="w-5 h-5 text-purple-400" />
-                        </div>
-                        <div>
-                            <h2 className="text-sm font-semibold text-cream-50">Last Session Review</h2>
-                            <p className="text-xs text-dark-300">{session.title} • {session.date}
-                                {session.duration_min && ` • ${session.duration_min} min`}
-                            </p>
-                        </div>
-                    </div>
-                    <button onClick={() => setExpanded(!expanded)}
-                        className="text-dark-300 hover:text-cream-100 transition-colors cursor-pointer">
-                        {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                    </button>
-                </div>
-
-                {/* Overall feedback */}
-                <p className="text-cream-200 text-sm leading-relaxed mb-4">{session.overall_feedback}</p>
-
-                {expanded && (
-                    <div className="space-y-3">
-                        {session.exercises.map((ex, i) => (
-                            <ExerciseCard key={i} exercise={ex} />
-                        ))}
-                    </div>
-                )}
-            </div>
-        </div>
-    );
-}
-
-/* ── Exercise Card with Rank + Chart ────────────────── */
-
-function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
-    const [showHistory, setShowHistory] = useState(false);
-    const rankColor = RANK_COLORS[exercise.rank_index] ?? '#8C8C8C';
-    const rankBg = RANK_BG[exercise.rank_index] ?? 'bg-gray-500/10 border-gray-500/30';
-
-    const TrendIcon = exercise.trend === 'up' ? TrendingUp
-        : exercise.trend === 'down' ? TrendingDown
-        : exercise.trend === 'new' ? Sparkles
-        : Minus;
-
-    const trendColor = exercise.trend === 'up' ? 'text-green-400'
-        : exercise.trend === 'down' ? 'text-red-400'
-        : exercise.trend === 'new' ? 'text-blue-400'
-        : 'text-dark-300';
-
-    // Compute max volume for chart scaling
-    const historyVolumes = exercise.history.map(h => h.volume_kg);
-    const allVolumes = [...historyVolumes, exercise.total_volume_kg];
-    const maxVol = Math.max(...allVolumes, 1);
-
-    return (
-        <div className="bg-dark-800/60 backdrop-blur-sm rounded-xl border border-dark-500/40 p-4">
-            {/* Header row */}
-            <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                    <Dumbbell size={14} className="text-dark-300 shrink-0" />
-                    <span className="text-sm font-medium text-cream-50 truncate">{exercise.name}</span>
-                    <span className="text-xs text-dark-400 shrink-0">{exercise.muscle_group}</span>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <TrendIcon size={14} className={trendColor} />
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${rankBg}`}
-                        style={{ color: rankColor }}>
-                        {exercise.rank}
-                    </span>
-                </div>
-            </div>
-
-            {/* Stats row */}
-            <div className="flex items-center gap-4 text-xs text-dark-300 mb-2">
-                <span>Best: <span className="text-cream-100 font-medium">{exercise.best_set}</span></span>
-                <span>Volume: <span className="text-cream-100 font-medium">{Math.round(exercise.total_volume_kg)} kg</span></span>
-            </div>
-
-            {/* Rank progress bar */}
-            <div className="w-full h-1.5 rounded-full bg-dark-600 overflow-hidden mb-2">
-                <div className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${((exercise.rank_index + 1) / 16) * 100}%`, backgroundColor: rankColor }} />
-            </div>
-
-            {/* Feedback */}
-            <p className="text-cream-200 text-xs leading-relaxed mb-2">{exercise.feedback}</p>
-
-            {/* History toggle */}
-            {exercise.history.length > 0 && (
-                <>
-                    <button onClick={() => setShowHistory(!showHistory)}
-                        className="text-xs text-gold-400 hover:text-gold-300 transition-colors flex items-center gap-1 cursor-pointer">
-                        {showHistory ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-                        {showHistory ? 'Hide' : 'Show'} progression ({exercise.history.length} sessions)
-                    </button>
-
-                    {showHistory && (
-                        <div className="mt-3 space-y-1">
-                            {/* Mini bar chart */}
-                            <div className="flex items-end gap-1 h-16">
-                                {exercise.history.map((h, i) => (
-                                    <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
-                                        <div className="w-full rounded-t-sm overflow-hidden relative"
-                                            style={{ height: `${(h.volume_kg / maxVol) * 100}%`, minHeight: '4px' }}>
-                                            <div className="absolute inset-0 bg-purple-500/40 rounded-t-sm" />
-                                        </div>
-                                    </div>
-                                ))}
-                                {/* Current session bar (highlighted) */}
-                                <div className="flex-1 flex flex-col items-center gap-0.5">
-                                    <div className="w-full rounded-t-sm overflow-hidden relative"
-                                        style={{ height: `${(exercise.total_volume_kg / maxVol) * 100}%`, minHeight: '4px' }}>
-                                        <div className="absolute inset-0 bg-gold-500/60 rounded-t-sm" />
-                                    </div>
-                                </div>
-                            </div>
-                            {/* Date labels */}
-                            <div className="flex gap-1 text-center">
-                                {exercise.history.map((h, i) => (
-                                    <div key={i} className="flex-1 text-[9px] text-dark-400 truncate">
-                                        {h.date.slice(5)}
-                                    </div>
-                                ))}
-                                <div className="flex-1 text-[9px] text-gold-400 font-bold">Now</div>
-                            </div>
-                            {/* Detail list */}
-                            <div className="mt-2 space-y-1">
-                                {exercise.history.map((h, i) => (
-                                    <div key={i} className="flex justify-between text-xs text-dark-300">
-                                        <span>{h.date}</span>
-                                        <span>{h.best_set} • {Math.round(h.volume_kg)} kg vol</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </>
+            {/* ─── Session Review Modal ──────────────── */}
+            {modalOpen && (
+                <SessionModal
+                    tab={modalOpen}
+                    onTabChange={setModalOpen}
+                    onClose={() => setModalOpen(null)}
+                    data={sessionReview}
+                    loading={sessionLoading}
+                    error={sessionError}
+                    onRetry={() => {
+                        setSessionReview(null);
+                        openSessionModal(modalOpen);
+                    }}
+                />
             )}
         </div>
     );
 }
 
 /* ═══════════════════════════════════════════════════════
-   NEXT SESSION CARD
+   SESSION REVIEW MODAL
    ═══════════════════════════════════════════════════════ */
 
-function NextSessionCard({ session }: { session: NonNullable<Briefing['briefing_data']['next_session']> }) {
+function SessionModal({ tab, onTabChange, onClose, data, loading, error, onRetry }: {
+    tab: 'last' | 'next';
+    onTabChange: (t: 'last' | 'next') => void;
+    onClose: () => void;
+    data: SessionReviewData | null;
+    loading: boolean;
+    error: string | null;
+    onRetry: () => void;
+}) {
     return (
-        <div className="relative rounded-2xl overflow-hidden border border-dark-500/50">
-            {/* Background image */}
-            <div className="absolute inset-0 z-0">
-                <img
-                    src="https://images.unsplash.com/photo-1517963879433-6ad2b056d712?w=800&q=70&auto=format"
-                    alt="" className="w-full h-full object-cover" />
-                <div className="absolute inset-0 bg-dark-900/85 backdrop-blur-sm" />
-            </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
+            onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-            {/* Content */}
-            <div className="relative z-10 p-6">
-                <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-blue-500/20 border border-blue-500/30 flex items-center justify-center">
-                        <Crosshair className="w-5 h-5 text-blue-400" />
+            {/* Modal */}
+            <div className="relative w-full max-w-lg max-h-[85vh] bg-dark-800/95 backdrop-blur-xl border border-dark-500/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+                {/* Header */}
+                <div className="flex items-center justify-between p-5 border-b border-dark-500/30">
+                    <div className="flex gap-1 bg-dark-700/50 rounded-lg p-0.5">
+                        <button
+                            onClick={() => onTabChange('last')}
+                            className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${tab === 'last'
+                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                    : 'text-dark-300 hover:text-cream-100'
+                                }`}>
+                            <Trophy size={12} className="inline mr-1.5" />Last Session
+                        </button>
+                        <button
+                            onClick={() => onTabChange('next')}
+                            className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${tab === 'next'
+                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                    : 'text-dark-300 hover:text-cream-100'
+                                }`}>
+                            <Crosshair size={12} className="inline mr-1.5" />Next Session
+                        </button>
                     </div>
-                    <div>
-                        <h2 className="text-sm font-semibold text-cream-50">Next Session</h2>
-                        <p className="text-xs text-dark-300">{session.title}</p>
-                    </div>
+                    <button onClick={onClose}
+                        className="text-dark-300 hover:text-cream-100 transition-colors cursor-pointer">
+                        <X size={18} />
+                    </button>
                 </div>
 
-                <p className="text-cream-200 text-sm leading-relaxed mb-4">{session.reasoning}</p>
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-5">
+                    {loading && (
+                        <div className="py-16 text-center space-y-3">
+                            <Loader2 className="w-8 h-8 text-gold-400 animate-spin mx-auto" />
+                            <p className="text-dark-300 text-sm">Analyzing your workouts…</p>
+                            <p className="text-dark-400 text-xs">This may take a few seconds</p>
+                        </div>
+                    )}
+                    {error && !loading && (
+                        <div className="py-16 text-center space-y-3">
+                            <p className="text-red-400 text-sm">{error}</p>
+                            <button onClick={onRetry} className="btn-gold text-sm px-6 py-2">Retry</button>
+                        </div>
+                    )}
+                    {data && !loading && !error && (
+                        tab === 'last'
+                            ? <LastSessionContent session={data.last_session} />
+                            : <NextSessionContent session={data.next_session} />
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
 
-                {/* Focus muscles */}
-                <div className="flex flex-wrap gap-2 mb-3">
+/* ── Last Session Content ───────────────────────────── */
+
+function LastSessionContent({ session }: { session: SessionReviewData['last_session'] }) {
+    if (!session) {
+        return <p className="text-dark-300 text-sm text-center py-8">No recent session data available.</p>;
+    }
+
+    return (
+        <div className="space-y-4">
+            {/* Session header */}
+            <div>
+                <h3 className="text-lg font-semibold text-cream-50">{session.title}</h3>
+                <p className="text-xs text-dark-300 mt-0.5">
+                    {session.date}{session.duration_min ? ` • ${session.duration_min} min` : ''}
+                </p>
+            </div>
+            <p className="text-cream-200 text-sm leading-relaxed">{session.overall_feedback}</p>
+
+            {/* Exercise cards */}
+            <div className="space-y-3">
+                {session.exercises.map((ex, i) => (
+                    <ExerciseCard key={i} exercise={ex} />
+                ))}
+            </div>
+        </div>
+    );
+}
+
+/* ── Exercise Card with Rank + SVG Chart ────────────── */
+
+function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
+    const rankColor = RANK_COLORS[exercise.rank_index] ?? '#8C8C8C';
+    const rankBg = RANK_BG[exercise.rank_index] ?? 'bg-gray-500/10 border-gray-500/30';
+
+    const TrendIcon = exercise.trend === 'up' ? TrendingUp
+        : exercise.trend === 'down' ? TrendingDown
+            : exercise.trend === 'new' ? Sparkles : Minus;
+
+    const trendColor = exercise.trend === 'up' ? 'text-green-400'
+        : exercise.trend === 'down' ? 'text-red-400'
+            : exercise.trend === 'new' ? 'text-blue-400' : 'text-dark-300';
+
+    return (
+        <div className="bg-dark-700/40 backdrop-blur-sm rounded-xl border border-dark-500/30 p-4 space-y-3">
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 min-w-0">
+                    <Dumbbell size={14} className="text-dark-300 shrink-0" />
+                    <span className="text-sm font-medium text-cream-50 truncate">{exercise.name}</span>
+                    <span className="text-[10px] text-dark-400 shrink-0 uppercase">{exercise.muscle_group}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    <TrendIcon size={14} className={trendColor} />
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${rankBg}`}
+                        style={{ color: rankColor }}>
+                        {exercise.rank}
+                    </span>
+                </div>
+            </div>
+
+            {/* Stats */}
+            <div className="flex items-center gap-4 text-xs text-dark-300">
+                <span>Best: <span className="text-cream-100 font-medium">{exercise.best_set}</span></span>
+                <span>Volume: <span className="text-cream-100 font-medium">{Math.round(exercise.total_volume_kg)} kg</span></span>
+            </div>
+
+            {/* Rank progress bar */}
+            <div className="w-full h-1.5 rounded-full bg-dark-600 overflow-hidden">
+                <div className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${((exercise.rank_index + 1) / 16) * 100}%`, backgroundColor: rankColor }} />
+            </div>
+
+            {/* Feedback */}
+            <p className="text-cream-200 text-xs leading-relaxed">{exercise.feedback}</p>
+
+            {/* Progression Chart (SVG) */}
+            {exercise.history.length > 0 && (
+                <ProgressionChart history={exercise.history} currentVolume={exercise.total_volume_kg} />
+            )}
+        </div>
+    );
+}
+
+/* ── SVG Progression Chart ──────────────────────────── */
+
+function ProgressionChart({ history, currentVolume }: {
+    history: { date: string; best_set: string; volume_kg: number }[];
+    currentVolume: number;
+}) {
+    const allPoints = [...history.map(h => h.volume_kg), currentVolume];
+    const maxVol = Math.max(...allPoints, 1);
+    const minVol = Math.min(...allPoints);
+    const range = maxVol - minVol || 1;
+
+    const W = 280;
+    const H = 80;
+    const padX = 8;
+    const padY = 8;
+    const chartW = W - padX * 2;
+    const chartH = H - padY * 2;
+
+    const points = allPoints.map((v, i) => ({
+        x: padX + (i / (allPoints.length - 1 || 1)) * chartW,
+        y: padY + chartH - ((v - minVol) / range) * chartH,
+    }));
+
+    // Build SVG path
+    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+    const areaPath = `${linePath} L ${points[points.length - 1].x} ${H - padY} L ${points[0].x} ${H - padY} Z`;
+
+    return (
+        <div className="mt-1">
+            <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-1.5">Volume Progression</p>
+            <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="none">
+                <defs>
+                    <linearGradient id={`grad-${history[0]?.date}`} x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#A855F7" stopOpacity="0.3" />
+                        <stop offset="100%" stopColor="#A855F7" stopOpacity="0" />
+                    </linearGradient>
+                </defs>
+                {/* Area fill */}
+                <path d={areaPath} fill={`url(#grad-${history[0]?.date})`} />
+                {/* Line */}
+                <path d={linePath} fill="none" stroke="#A855F7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                {/* Data dots */}
+                {points.map((p, i) => (
+                    <circle key={i} cx={p.x} cy={p.y} r={i === points.length - 1 ? 4 : 2.5}
+                        fill={i === points.length - 1 ? '#F59E0B' : '#A855F7'}
+                        stroke={i === points.length - 1 ? '#F59E0B' : 'none'} strokeWidth="1" />
+                ))}
+            </svg>
+            {/* Labels */}
+            <div className="flex justify-between text-[9px] text-dark-400 mt-0.5 px-1">
+                {allPoints.map((v, i) => (
+                    <span key={i} className={i === allPoints.length - 1 ? 'text-gold-400 font-bold' : ''}>
+                        {Math.round(v)}kg
+                    </span>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+/* ── Next Session Content ───────────────────────────── */
+
+function NextSessionContent({ session }: { session: SessionReviewData['next_session'] }) {
+    if (!session) {
+        return <p className="text-dark-300 text-sm text-center py-8">No suggestion available yet.</p>;
+    }
+
+    return (
+        <div className="space-y-4">
+            <div>
+                <h3 className="text-lg font-semibold text-cream-50">{session.title}</h3>
+            </div>
+            <p className="text-cream-200 text-sm leading-relaxed">{session.reasoning}</p>
+
+            {/* Focus muscles */}
+            <div>
+                <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2">Focus Muscles</p>
+                <div className="flex flex-wrap gap-2">
                     {session.focus_muscles.map((m, i) => (
                         <span key={i} className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300">
-                            <Star size={10} />
-                            {m}
+                            <Star size={10} />{m}
                         </span>
                     ))}
                 </div>
+            </div>
 
-                {/* Suggested exercises */}
+            {/* Suggested exercises */}
+            <div>
+                <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2">Suggested Exercises</p>
                 <div className="space-y-1.5">
                     {session.suggested_exercises.map((ex, i) => (
-                        <div key={i} className="flex items-center gap-2 text-xs text-cream-200">
-                            <Dumbbell size={12} className="text-dark-300 shrink-0" />
-                            {ex}
+                        <div key={i} className="flex items-center gap-2.5 text-sm text-cream-200 bg-dark-700/40 rounded-lg px-3 py-2 border border-dark-500/20">
+                            <Dumbbell size={13} className="text-dark-300 shrink-0" />{ex}
                         </div>
                     ))}
                 </div>

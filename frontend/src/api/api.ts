@@ -133,6 +133,9 @@ export interface BriefingData {
   nutrition_review: NutritionReview;
   workout_suggestion: string;
   daily_mission: string;
+}
+
+export interface SessionReviewData {
   last_session: LastSession | null;
   next_session: NextSession | null;
 }
@@ -149,3 +152,6 @@ export const getTodayBriefing = () =>
 
 export const regenerateBriefing = () =>
   apiRequest<Briefing>('/api/briefing/regenerate', { method: 'POST' });
+
+export const getSessionReview = () =>
+  apiRequest<SessionReviewData>('/api/briefing/session-review', { method: 'POST' });

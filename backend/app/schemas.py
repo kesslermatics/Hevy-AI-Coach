@@ -127,8 +127,6 @@ class BriefingData(BaseModel):
     nutrition_review: NutritionReview
     workout_suggestion: str
     daily_mission: str
-    last_session: Optional[Any] = None
-    next_session: Optional[Any] = None
 
 
 class BriefingResponse(BaseModel):

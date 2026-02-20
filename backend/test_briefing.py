@@ -99,7 +99,7 @@ async def main():
         nr = briefing.get("nutrition_review", {})
         if isinstance(nr, dict):
             print()
-            print(f"  � Calories: {nr.get('calories', 'N/A')}")
+            print(f"  🔥 Calories: {nr.get('calories', 'N/A')}")
             print(f"  🥩 Protein:  {nr.get('protein', 'N/A')}")
             print(f"  🌾 Carbs:    {nr.get('carbs', 'N/A')}")
             print(f"  💧 Fat:      {nr.get('fat', 'N/A')}")
@@ -112,8 +112,19 @@ async def main():
         print(f"\n  🎯 Daily Mission:")
         print(f"     {briefing.get('daily_mission', 'N/A')}")
 
-        # Last Session
-        ls = briefing.get("last_session")
+        print()
+        print("═" * 55)
+
+        # Step 3: Session Review (separate call)
+        print()
+        print("🤖 Calling Gemini for Session Review...")
+        from app.services.ai_service import generate_session_review
+        session = await generate_session_review(
+            yazio_data=yazio,
+            hevy_data=hevy,
+        )
+
+        ls = session.get("last_session")
         if ls:
             print(f"\n  🏆 Last Session: {ls.get('title', '?')} ({ls.get('date', '?')})")
             print(f"     {ls.get('overall_feedback', '')}")
@@ -123,8 +134,7 @@ async def main():
                       f"— Best: {ex.get('best_set', '?')} | Vol: {ex.get('total_volume_kg', 0)} kg")
                 print(f"       {ex.get('feedback', '')}")
 
-        # Next Session
-        ns = briefing.get("next_session")
+        ns = session.get("next_session")
         if ns:
             print(f"\n  🎯 Next Session: {ns.get('title', '?')}")
             print(f"     {ns.get('reasoning', '')}")
@@ -134,8 +144,11 @@ async def main():
         print()
         print("═" * 55)
         print()
-        print("📋 Raw JSON:")
+        print("📋 Briefing JSON:")
         print(json.dumps(briefing, indent=2, ensure_ascii=False))
+        print()
+        print("📋 Session Review JSON:")
+        print(json.dumps(session, indent=2, ensure_ascii=False))
 
     finally:
         db.close()

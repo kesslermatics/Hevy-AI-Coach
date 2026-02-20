@@ -25,6 +25,9 @@ FALLBACK_BRIEFING = {
     },
     "workout_suggestion": "Unable to generate workout suggestion — please check your Hevy connection.",
     "daily_mission": "Stay consistent and keep tracking your progress! 💪",
+}
+
+FALLBACK_SESSION_REVIEW = {
     "last_session": None,
     "next_session": None,
 }
@@ -88,11 +91,11 @@ def _build_system_prompt(profile: Optional[dict]) -> str:
 
 You will receive:
 1. Yesterday's nutrition data from Yazio (may be partial or missing entirely).
-2. The last 5 completed workouts from Hevy (exercises, sets, weights).
+2. The last few completed workouts from Hevy (exercises, sets, weights).
 
 Your job:
 - Address the user by their first name.
-- Analyze the last 5 workouts to deduce which muscle groups have been trained recently and which are recovered. Suggest a smart workout focus for TODAY based on recovery and training frequency.
+- Analyze recent workouts to deduce which muscle groups have been trained recently and which are recovered. Suggest a smart workout focus for TODAY based on recovery and training frequency.
 - Review yesterday's nutrition per macro category. Be encouraging and realistic — nobody hits their macros perfectly every day, and that's okay. Acknowledge what went well, and give a gentle nudge where there's room to improve.
 - Small deviations (±10-15%) from targets are totally normal and should be praised or ignored, not criticized.
 - Only flag something if it's significantly off (e.g. 30%+ deviation).
@@ -100,19 +103,6 @@ Your job:
 - Do NOT mention water intake if it is 0, missing, or clearly not tracked.
 - Do NOT mention data that is clearly missing or zero — just skip it gracefully.
 - Keep it short, warm, and motivating. Use short sentences.
-
-RANK SYSTEM for exercise ratings:
-Rank users per exercise based on their performance relative to their age, sex, height, and weight.
-Use this CS2-style tier list (from lowest to highest):
-Silver I, Silver II, Silver III, Silver IV,
-Gold Nova I, Gold Nova II, Gold Nova III, Gold Nova Master,
-Master Guardian I, Master Guardian II, Master Guardian Elite,
-Distinguished Master Guardian, Legendary Eagle, Legendary Eagle Master,
-Supreme Master First Class, Global Elite.
-
-For "last_session": Analyze ONLY the MOST RECENT workout (Workout 1). For each exercise, look through ALL provided workouts to find previous instances of that same exercise. Calculate progression (weight/reps changes over time). Rate each exercise with a rank based on the user's stats. Give short coaching feedback per exercise (what was good, what to improve). Also give an overall session summary.
-
-For "next_session": Based on recovery analysis of all workouts, suggest what the next training session should focus on and why.
 
 For each macro in nutrition_review, ALWAYS include the actual number and the goal number (e.g. "2100 of 2500 kcal — solid, right on track!").
 
@@ -125,38 +115,7 @@ You MUST respond with valid JSON matching this exact schema:
     "fat": "<string, ONE short sentence WITH actual/goal grams>"
   }},
   "workout_suggestion": "<string, 2-3 sentences suggesting today's training focus>",
-  "daily_mission": "<string, one motivational sentence>",
-  "last_session": {{
-    "title": "<string, name of the most recent workout>",
-    "date": "<string, date of the workout>",
-    "duration_min": <int or null>,
-    "overall_feedback": "<string, 2-3 sentences: what went well, what to improve>",
-    "exercises": [
-      {{
-        "name": "<string, exercise name>",
-        "muscle_group": "<string>",
-        "best_set": "<string, e.g. '80kg × 8'>",
-        "total_volume_kg": <number, total weight × reps across all sets>,
-        "rank": "<string, one of the CS2 rank tier names>",
-        "rank_index": <int, 0-15 index in the tier list>,
-        "trend": "<string, 'up' | 'down' | 'stable' | 'new'>",
-        "history": [
-          {{
-            "date": "<string, workout date>",
-            "best_set": "<string, e.g. '75kg × 8'>",
-            "volume_kg": <number>
-          }}
-        ],
-        "feedback": "<string, ONE short sentence of coaching advice>"
-      }}
-    ]
-  }},
-  "next_session": {{
-    "title": "<string, suggested workout name/focus>",
-    "reasoning": "<string, 2-3 sentences explaining why these muscle groups>",
-    "focus_muscles": ["<string>", "..."],
-    "suggested_exercises": ["<string>", "..."]
-  }}
+  "daily_mission": "<string, one motivational sentence>"
 }}
 
 Respond ONLY with the JSON object. No markdown, no explanation."""
@@ -256,7 +215,7 @@ async def generate_daily_briefing(
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.7,
-                max_output_tokens=8192,
+                max_output_tokens=2048,
                 response_mime_type="application/json",
             ),
         )
@@ -290,21 +249,6 @@ async def generate_daily_briefing(
                 if k not in nr:
                     nr[k] = ""
 
-        # Ensure last_session and next_session exist (may be null)
-        if "last_session" not in parsed:
-            parsed["last_session"] = None
-        if "next_session" not in parsed:
-            parsed["next_session"] = None
-
-        # Validate exercise rank indices
-        ls = parsed.get("last_session")
-        if isinstance(ls, dict):
-            for ex in ls.get("exercises", []):
-                if "rank_index" in ex:
-                    ex["rank_index"] = max(0, min(15, int(ex["rank_index"])))
-                if "history" not in ex:
-                    ex["history"] = []
-
         return parsed
 
     except json.JSONDecodeError as exc:
@@ -313,3 +257,150 @@ async def generate_daily_briefing(
     except Exception as exc:
         logger.error("Gemini API error: %s", exc)
         return FALLBACK_BRIEFING
+
+
+def _build_session_review_prompt(profile: Optional[dict]) -> str:
+    """Build system prompt specifically for session review + next session analysis."""
+    p = profile or {}
+    name = " ".join(filter(None, [p.get("first_name"), p.get("last_name")])) or "Athlete"
+    goal = (p.get("goal") or "general fitness").replace("_", " ")
+    sex = p.get("sex", "")
+    height = p.get("body_height_cm")
+    current_weight = p.get("current_weight_kg")
+    dob = p.get("date_of_birth", "")
+
+    context_lines: list[str] = [f"The user's name is **{name}**."]
+    if sex:
+        context_lines.append(f"Sex: {sex}.")
+    if dob:
+        context_lines.append(f"Date of birth: {dob}.")
+    if height:
+        context_lines.append(f"Height: {height} cm.")
+    if current_weight:
+        context_lines.append(f"Current weight: {current_weight} kg.")
+    context_lines.append(f"Goal: **{goal}**.")
+
+    user_context = "\n".join(context_lines)
+
+    return f"""You are a supportive, friendly fitness coach. Your name is Coach.
+
+=== USER PROFILE ===
+{user_context}
+
+You will receive the user's last 20 completed workouts from Hevy (exercises, sets, weights).
+
+RANK SYSTEM for exercise ratings:
+Rank users per exercise based on their performance relative to their age, sex, height, and weight.
+Use this CS2-style tier list (index 0-15, from lowest to highest):
+0: Silver I, 1: Silver II, 2: Silver III, 3: Silver IV,
+4: Gold Nova I, 5: Gold Nova II, 6: Gold Nova III, 7: Gold Nova Master,
+8: Master Guardian I, 9: Master Guardian II, 10: Master Guardian Elite,
+11: Distinguished Master Guardian, 12: Legendary Eagle, 13: Legendary Eagle Master,
+14: Supreme Master First Class, 15: Global Elite.
+
+Your tasks:
+
+1. **last_session**: Analyze the MOST RECENT workout (Workout 1).
+   - For each exercise, search ALL 20 workouts for previous instances.
+   - Build a "history" array showing past performances (date, best set, volume).
+   - Calculate trend: "up" if improving, "down" if declining, "stable" if similar, "new" if first time.
+   - Assign a CS2 rank based on the user's stats (age, sex, height, weight).
+   - Give ONE short sentence of coaching feedback per exercise.
+   - Give an overall session summary (2-3 sentences).
+
+2. **next_session**: Based on recovery analysis of all workouts, suggest what the next session should focus on and why.
+
+Keep feedback supportive, short, and actionable.
+
+You MUST respond with valid JSON matching this exact schema:
+{{
+  "last_session": {{
+    "title": "<string, name of the most recent workout>",
+    "date": "<string, date of the workout>",
+    "duration_min": <int or null>,
+    "overall_feedback": "<string, 2-3 sentences>",
+    "exercises": [
+      {{
+        "name": "<string>",
+        "muscle_group": "<string>",
+        "best_set": "<string, e.g. '80kg × 8'>",
+        "total_volume_kg": <number>,
+        "rank": "<string, CS2 rank name>",
+        "rank_index": <int, 0-15>,
+        "trend": "<'up' | 'down' | 'stable' | 'new'>",
+        "history": [
+          {{ "date": "<string>", "best_set": "<string>", "volume_kg": <number> }}
+        ],
+        "feedback": "<string, ONE short sentence>"
+      }}
+    ]
+  }},
+  "next_session": {{
+    "title": "<string, suggested workout name/focus>",
+    "reasoning": "<string, 2-3 sentences>",
+    "focus_muscles": ["<string>"],
+    "suggested_exercises": ["<string>"]
+  }}
+}}
+
+Respond ONLY with the JSON object. No markdown, no explanation."""
+
+
+async def generate_session_review(
+    yazio_data: Optional[dict],
+    hevy_data: Optional[list],
+) -> dict:
+    """
+    Call Gemini to generate a detailed session review + next session suggestion.
+    This is called on-demand when the user opens the session review modal.
+    """
+    client = genai.Client(api_key=settings.gemini_api_key)
+
+    profile = yazio_data.get("profile") if yazio_data else None
+    system_prompt = _build_session_review_prompt(profile)
+    user_message = _build_user_message(None, hevy_data)  # Only workouts needed
+
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=user_message,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.7,
+                max_output_tokens=8192,
+                response_mime_type="application/json",
+            ),
+        )
+
+        raw_content = response.text
+        if not raw_content:
+            logger.error("Gemini returned empty content for session review")
+            return FALLBACK_SESSION_REVIEW
+
+        cleaned = re.sub(r"^```(?:json)?\s*", "", raw_content.strip())
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+
+        parsed = json.loads(cleaned)
+
+        # Validate last_session
+        ls = parsed.get("last_session")
+        if isinstance(ls, dict):
+            for ex in ls.get("exercises", []):
+                if "rank_index" in ex:
+                    ex["rank_index"] = max(0, min(15, int(ex["rank_index"])))
+                if "history" not in ex:
+                    ex["history"] = []
+        else:
+            parsed["last_session"] = None
+
+        if "next_session" not in parsed:
+            parsed["next_session"] = None
+
+        return parsed
+
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to parse session review JSON: %s — raw: %s", exc, raw_content[:500])
+        return FALLBACK_SESSION_REVIEW
+    except Exception as exc:
+        logger.error("Gemini API error (session review): %s", exc)
+        return FALLBACK_SESSION_REVIEW

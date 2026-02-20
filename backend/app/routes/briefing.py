@@ -12,7 +12,7 @@ from app.dependencies import get_current_user
 from app.models import User, MorningBriefing
 from app.schemas import BriefingResponse
 from app.services.aggregator import gather_user_context
-from app.services.ai_service import generate_daily_briefing
+from app.services.ai_service import generate_daily_briefing, generate_session_review
 
 logger = logging.getLogger(__name__)
 
@@ -110,3 +110,23 @@ async def regenerate_briefing(
     db.commit()
 
     return await _generate_and_save(current_user, db)
+
+
+@router.post("/session-review")
+async def get_session_review(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    On-demand session review — called when the user opens the modal.
+    Makes a fresh Gemini call every time (not cached).
+    Returns last_session + next_session analysis.
+    """
+    context = await gather_user_context(current_user)
+
+    result = await generate_session_review(
+        yazio_data=context["yazio"],
+        hevy_data=context["hevy"],
+    )
+
+    return result
