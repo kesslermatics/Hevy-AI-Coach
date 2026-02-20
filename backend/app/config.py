@@ -1,0 +1,42 @@
+"""
+Configuration settings loaded from environment variables.
+NEVER hardcode secrets - always use environment variables!
+"""
+import os
+from pydantic_settings import BaseSettings
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
+
+class Settings(BaseSettings):
+    """Application settings loaded from environment variables."""
+    
+    # Database
+    database_url: str = os.getenv("DATABASE_URL", "")
+    
+    # JWT Settings
+    jwt_secret_key: str = os.getenv("JWT_SECRET_KEY", "")
+    jwt_algorithm: str = os.getenv("JWT_ALGORITHM", "HS256")
+    access_token_expire_minutes: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "1440"))
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+
+def get_settings() -> Settings:
+    """Get application settings singleton."""
+    settings = Settings()
+    
+    # Validate critical settings
+    if not settings.database_url:
+        raise ValueError("DATABASE_URL environment variable is not set!")
+    if not settings.jwt_secret_key:
+        raise ValueError("JWT_SECRET_KEY environment variable is not set!")
+    
+    return settings
+
+
+settings = get_settings()
