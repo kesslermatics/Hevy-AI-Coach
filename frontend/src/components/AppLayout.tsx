@@ -21,7 +21,7 @@ export default function AppLayout() {
         refreshUser()
             .then(u => {
                 // If credentials or goal are missing and not already on setup page → redirect
-                const needsSetup = !u.has_hevy_key || !u.has_yazio || !u.current_goal;
+                const needsSetup = !u.has_hevy_key || !u.has_yazio;
                 if (needsSetup && location.pathname !== '/setup') {
                     navigate('/setup');
                 }

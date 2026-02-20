@@ -24,22 +24,62 @@ FALLBACK_BRIEFING = {
 }
 
 
-def _build_system_prompt(user_goal: Optional[str], target_weight: Optional[float]) -> str:
-    """Build the system prompt for the AI with user-specific context."""
-    goal_text = user_goal or "General fitness"
-    weight_text = f" towards a target weight of {target_weight} kg" if target_weight else ""
+def _build_system_prompt(profile: Optional[dict]) -> str:
+    """Build the system prompt for the AI with user-specific context from Yazio."""
+    # Extract profile info (all from Yazio)
+    p = profile or {}
+    name = " ".join(filter(None, [p.get("first_name"), p.get("last_name")])) or "Athlete"
+    goal = (p.get("goal") or "general fitness").replace("_", " ")
+    sex = p.get("sex", "")
+    height = p.get("body_height_cm")
+    current_weight = p.get("current_weight_kg")
+    start_weight = p.get("start_weight_kg")
+    dob = p.get("date_of_birth", "")
+    activity = (p.get("activity_degree") or "").replace("_", " ")
+    diet_name = (p.get("diet_name") or "").replace("_", " ")
+    diet_macros = ""
+    if p.get("diet_protein_pct"):
+        diet_macros = (f" (P: {p['diet_protein_pct']}% / "
+                       f"C: {p.get('diet_carb_pct', '?')}% / "
+                       f"F: {p.get('diet_fat_pct', '?')}%)")
+    weight_change = p.get("weight_change_per_week_kg")
+
+    # Build user context lines (skip missing data)
+    context_lines: list[str] = [f"The user's name is **{name}**."]
+    if sex:
+        context_lines.append(f"Sex: {sex}.")
+    if dob:
+        context_lines.append(f"Date of birth: {dob}.")
+    if height:
+        context_lines.append(f"Height: {height} cm.")
+    if current_weight:
+        context_lines.append(f"Current weight: {current_weight} kg.")
+    if start_weight and current_weight and abs(start_weight - current_weight) > 0.5:
+        context_lines.append(f"Start weight: {start_weight} kg (progress: {round(start_weight - current_weight, 1)} kg).")
+    context_lines.append(f"Goal: **{goal}**.")
+    if weight_change:
+        context_lines.append(f"Target weight change: {weight_change} kg/week.")
+    if activity:
+        context_lines.append(f"Activity level: {activity}.")
+    if diet_name:
+        context_lines.append(f"Diet: {diet_name}{diet_macros}.")
+
+    user_context = "\n".join(context_lines)
 
     return f"""You are an elite, no-nonsense fitness coach. Your name is Coach.
 
-The user's current goal is: **{goal_text}**{weight_text}.
+=== USER PROFILE ===
+{user_context}
 
 You will receive:
 1. Yesterday's nutrition data from Yazio (may be partial or missing entirely).
 2. The last 5 completed workouts from Hevy (exercises, sets, weights).
 
 Your job:
+- Address the user by their first name.
 - Analyze the last 5 workouts to deduce which muscle groups have been trained recently and which are recovered. Suggest a smart workout focus for TODAY based on recovery and training frequency.
-- Review yesterday's nutrition. Comment on calorie intake, macros, and how well they align with the user's goal.
+- Review yesterday's nutrition. Comment on calorie intake, macros, and how well they align with the user's goal and diet plan.
+- Consider the user's body stats (height, weight, goal) when evaluating nutrition and training.
 - Do NOT mention water intake if it is 0, missing, or clearly not tracked.
 - Do NOT mention data that is clearly missing or zero — just skip it gracefully.
 - Be motivating but direct. Use short sentences.
@@ -124,8 +164,6 @@ def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -
 
 
 async def generate_daily_briefing(
-    user_goal: Optional[str],
-    target_weight: Optional[float],
     yazio_data: Optional[dict],
     hevy_data: Optional[list],
 ) -> dict:
@@ -138,7 +176,9 @@ async def generate_daily_briefing(
     """
     client = genai.Client(api_key=settings.gemini_api_key)
 
-    system_prompt = _build_system_prompt(user_goal, target_weight)
+    # Extract profile from Yazio data (name, height, weight, goal, diet…)
+    profile = yazio_data.get("profile") if yazio_data else None
+    system_prompt = _build_system_prompt(profile)
     user_message = _build_user_message(yazio_data, hevy_data)
 
     try:

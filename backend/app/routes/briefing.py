@@ -30,10 +30,8 @@ async def _generate_and_save(user: User, db: Session) -> MorningBriefing:
     # 1) Aggregate Yazio + Hevy data
     context = await gather_user_context(user)
 
-    # 2) Call OpenAI
+    # 2) Call Gemini
     briefing_data = await generate_daily_briefing(
-        user_goal=user.current_goal,
-        target_weight=user.target_weight,
         yazio_data=context["yazio"],
         hevy_data=context["hevy"],
     )

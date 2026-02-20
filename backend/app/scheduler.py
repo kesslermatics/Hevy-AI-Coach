@@ -39,8 +39,6 @@ async def _generate_for_user(user: User, db: Session) -> bool:
     try:
         context = await gather_user_context(user)
         briefing_data = await generate_daily_briefing(
-            user_goal=user.current_goal,
-            target_weight=user.target_weight,
             yazio_data=context["yazio"],
             hevy_data=context["hevy"],
         )

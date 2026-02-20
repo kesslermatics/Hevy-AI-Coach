@@ -151,8 +151,7 @@ export default function Dashboard() {
                         <div className="text-center">
                             <span className="inline-flex items-center gap-2 bg-dark-700/60 border border-dark-500/50 text-dark-300 text-xs font-medium px-4 py-2 rounded-full">
                                 <Brain size={12} />
-                                Goal: {user.current_goal}
-                                {user.target_weight && ` → ${user.target_weight} kg`}
+                                Goal: {user.current_goal.replace(/_/g, ' ')}
                             </span>
                         </div>
                     )}

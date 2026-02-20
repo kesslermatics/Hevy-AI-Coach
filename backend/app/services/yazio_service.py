@@ -58,6 +58,46 @@ async def _fetch_daily_summary(client: httpx.AsyncClient, token: str, target_dat
         return None
 
 
+async def _fetch_user_profile(client: httpx.AsyncClient, token: str) -> Optional[dict]:
+    """Fetch the full Yazio user profile (/v15/user)."""
+    try:
+        resp = await client.get(
+            f"{YAZIO_BASE_URL}/user",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        )
+        if resp.status_code != 200:
+            logger.warning("Yazio user profile failed (HTTP %s)", resp.status_code)
+            return None
+        return resp.json()
+    except Exception as exc:
+        logger.error("Yazio user profile error: %s", exc)
+        return None
+
+
+def _parse_profile(raw: dict, summary_user: dict) -> dict:
+    """
+    Extract relevant user profile data from the /user endpoint
+    and the daily-summary 'user' field.
+    """
+    diet = raw.get("diet", {})
+    return {
+        "first_name": raw.get("first_name", ""),
+        "last_name": raw.get("last_name", ""),
+        "sex": raw.get("sex", ""),
+        "date_of_birth": raw.get("date_of_birth", ""),
+        "body_height_cm": raw.get("body_height"),
+        "current_weight_kg": summary_user.get("current_weight"),
+        "start_weight_kg": summary_user.get("start_weight") or raw.get("start_weight"),
+        "goal": summary_user.get("goal") or raw.get("goal", ""),
+        "activity_degree": raw.get("activity_degree", ""),
+        "weight_change_per_week_kg": raw.get("weight_change_per_week"),
+        "diet_name": diet.get("name", ""),
+        "diet_carb_pct": diet.get("carb_percentage"),
+        "diet_fat_pct": diet.get("fat_percentage"),
+        "diet_protein_pct": diet.get("protein_percentage"),
+    }
+
+
 def _parse_summary(raw: dict) -> dict:
     """
     Normalise a Yazio daily-summary into a clean dict.
@@ -116,16 +156,15 @@ def _parse_summary(raw: dict) -> dict:
         "water_goal_ml": water_goal_ml,
         "steps": steps,
         "activity_kcal": round(activity_kcal, 1),
-        "user_goal": user_info.get("goal", ""),
-        "current_weight": user_info.get("current_weight"),
     }
 
 
 async def fetch_yazio_summary(email: str, password: str, target_date: Optional[date] = None) -> Optional[dict]:
     """
-    High-level function: login → fetch yesterday's summary → parse.
+    High-level function: login → fetch yesterday's summary + user profile → parse.
 
-    Returns a clean dict or None if anything goes wrong.
+    Returns a dict with keys: meals, totals, goals, water_ml, steps, activity_kcal, profile.
+    Returns None if anything goes wrong.
     """
     if target_date is None:
         target_date = date.today() - timedelta(days=1)
@@ -141,4 +180,32 @@ async def fetch_yazio_summary(email: str, password: str, target_date: Optional[d
         if not raw:
             return None
 
-    return _parse_summary(raw)
+        # Fetch full user profile for name, height, goal, diet etc.
+        raw_profile = await _fetch_user_profile(client, token)
+
+    result = _parse_summary(raw)
+
+    # Merge profile data
+    summary_user = raw.get("user", {})
+    if raw_profile:
+        result["profile"] = _parse_profile(raw_profile, summary_user)
+    else:
+        # Fallback: use whatever the daily-summary 'user' field has
+        result["profile"] = {
+            "first_name": "",
+            "last_name": "",
+            "sex": summary_user.get("sex", ""),
+            "date_of_birth": "",
+            "body_height_cm": None,
+            "current_weight_kg": summary_user.get("current_weight"),
+            "start_weight_kg": summary_user.get("start_weight"),
+            "goal": summary_user.get("goal", ""),
+            "activity_degree": "",
+            "weight_change_per_week_kg": None,
+            "diet_name": "",
+            "diet_carb_pct": None,
+            "diet_fat_pct": None,
+            "diet_protein_pct": None,
+        }
+
+    return result
