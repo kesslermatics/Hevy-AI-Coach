@@ -24,7 +24,8 @@ class UserResponse(BaseModel):
     """Schema for user response (excludes sensitive data)."""
     id: UUID
     username: str
-    has_api_key: bool = False
+    has_hevy_key: bool = False
+    has_yazio: bool = False
     
     class Config:
         from_attributes = True
@@ -36,6 +37,8 @@ class UserInDB(BaseModel):
     username: str
     hashed_password: str
     hevy_api_key: Optional[str] = None
+    yazio_email: Optional[str] = None
+    yazio_password: Optional[str] = None
     
     class Config:
         from_attributes = True
@@ -52,6 +55,20 @@ class ApiKeyResponse(BaseModel):
     """Schema for API key update response."""
     message: str
     has_api_key: bool
+
+
+# ============ Yazio Schemas ============
+
+class YazioCredentialsUpdate(BaseModel):
+    """Schema for saving Yazio credentials."""
+    yazio_email: str = Field(..., min_length=1, max_length=255)
+    yazio_password: str = Field(..., min_length=1, max_length=255)
+
+
+class YazioCredentialsResponse(BaseModel):
+    """Schema for Yazio credentials update response."""
+    message: str
+    has_yazio: bool
 
 
 # ============ Token Schemas ============

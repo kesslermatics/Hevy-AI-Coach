@@ -1,14 +1,16 @@
 import { useState } from 'react';
-import { login } from '../api/api';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
+import { loginUser } from '../api/api';
+import { LogIn, Dumbbell, Eye, EyeOff } from 'lucide-react';
 
-interface LoginFormProps {
-    onLoginSuccess: () => void;
-    onSwitchToRegister: () => void;
-}
+export default function LoginForm() {
+    const navigate = useNavigate();
+    const location = useLocation();
+    const justRegistered = (location.state as any)?.registered;
 
-const LoginForm = ({ onLoginSuccess, onSwitchToRegister }: LoginFormProps) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [showPw, setShowPw] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -16,100 +18,88 @@ const LoginForm = ({ onLoginSuccess, onSwitchToRegister }: LoginFormProps) => {
         e.preventDefault();
         setError('');
         setLoading(true);
-
         try {
-            await login({ username, password });
-            onLoginSuccess();
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Login failed');
+            await loginUser(username, password);
+            navigate('/dashboard');
+        } catch (err: any) {
+            setError(err.message);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center px-4">
+        <div className="min-h-dvh flex items-center justify-center px-4 py-8">
             <div className="w-full max-w-md">
-                {/* Logo/Brand */}
+                {/* Logo */}
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-gradient-gold mb-2">HevyCoach AI</h1>
-                    <p className="text-base-400">Your intelligent fitness companion</p>
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-gold-500 to-gold-700 mb-4">
+                        <Dumbbell className="w-8 h-8 text-dark-900" />
+                    </div>
+                    <h1 className="text-2xl font-bold text-gradient-gold">HevyCoach AI</h1>
+                    <p className="text-dark-300 mt-1 text-sm">Sign in to your account</p>
                 </div>
 
-                {/* Form Card */}
-                <div className="card glow-gold">
-                    <h2 className="text-2xl font-semibold text-base-100 mb-6 text-center">
-                        Welcome Back
-                    </h2>
-
-                    <form onSubmit={handleSubmit} className="space-y-5">
-                        <div>
-                            <label htmlFor="username" className="label">
-                                Username
-                            </label>
-                            <input
-                                id="username"
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                placeholder="Enter username"
-                                className="input-field"
-                                required
-                            />
+                {/* Card */}
+                <form onSubmit={handleSubmit} className="card-glass p-6 sm:p-8 space-y-5">
+                    {justRegistered && (
+                        <div className="bg-green-500/10 border border-green-500/30 text-green-400 rounded-xl px-4 py-3 text-sm">
+                            Account created! Please sign in.
                         </div>
+                    )}
 
-                        <div>
-                            <label htmlFor="password" className="label">
-                                Password
-                            </label>
+                    {error && (
+                        <div className="bg-red-500/10 border border-red-500/30 text-red-400 rounded-xl px-4 py-3 text-sm">
+                            {error}
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="block text-sm text-cream-200 mb-1.5">Username</label>
+                        <input
+                            type="text"
+                            className="input-dark"
+                            placeholder="Enter your username"
+                            value={username}
+                            onChange={e => setUsername(e.target.value)}
+                            required
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm text-cream-200 mb-1.5">Password</label>
+                        <div className="relative">
                             <input
-                                id="password"
-                                type="password"
+                                type={showPw ? 'text' : 'password'}
+                                className="input-dark pr-12"
+                                placeholder="Enter your password"
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                placeholder="Enter password"
-                                className="input-field"
+                                onChange={e => setPassword(e.target.value)}
                                 required
                             />
+                            <button
+                                type="button"
+                                onClick={() => setShowPw(!showPw)}
+                                className="absolute right-3 top-1/2 -translate-y-1/2 text-dark-300 hover:text-gold-400 transition-colors"
+                            >
+                                {showPw ? <EyeOff size={18} /> : <Eye size={18} />}
+                            </button>
                         </div>
+                    </div>
 
-                        {error && (
-                            <div className="p-3 bg-error-500/10 border border-error-500/30 rounded-lg text-error-400 text-sm">
-                                {error}
-                            </div>
-                        )}
+                    <button type="submit" disabled={loading} className="btn-gold w-full flex items-center justify-center gap-2">
+                        <LogIn size={18} />
+                        {loading ? 'Signing in…' : 'Sign In'}
+                    </button>
 
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="btn-primary w-full"
-                        >
-                            {loading ? (
-                                <span className="flex items-center justify-center gap-2">
-                                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                    </svg>
-                                    Signing in...
-                                </span>
-                            ) : (
-                                'Sign In'
-                            )}
-                        </button>
-                    </form>
-
-                    <div className="divider-gold my-6" />
-
-                    <p className="text-center text-base-400 text-sm">
+                    <p className="text-center text-sm text-dark-300">
                         Don't have an account?{' '}
-                        <button onClick={onSwitchToRegister} className="link-gold font-medium">
+                        <Link to="/register" className="text-gold-400 hover:text-gold-300 transition-colors font-medium">
                             Create one
-                        </button>
+                        </Link>
                     </p>
-                </div>
+                </form>
             </div>
         </div>
     );
-};
-
-export default LoginForm;
+}

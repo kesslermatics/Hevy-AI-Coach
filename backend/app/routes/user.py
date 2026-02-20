@@ -5,8 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models import User
-from app.schemas import UserResponse, ApiKeyUpdate, ApiKeyResponse
+from app.schemas import (
+    UserResponse, ApiKeyUpdate, ApiKeyResponse,
+    YazioCredentialsUpdate, YazioCredentialsResponse,
+)
 from app.dependencies import get_current_user
+from app.encryption import encrypt_value
 
 router = APIRouter(prefix="/user", tags=["User"])
 
@@ -15,13 +19,13 @@ router = APIRouter(prefix="/user", tags=["User"])
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     """
     Get current authenticated user's information.
-    
-    Returns user profile excluding sensitive data like password.
+    Returns user profile excluding sensitive data.
     """
     return UserResponse(
         id=current_user.id,
         username=current_user.username,
-        has_api_key=current_user.hevy_api_key is not None
+        has_hevy_key=current_user.hevy_api_key is not None,
+        has_yazio=current_user.yazio_email is not None,
     )
 
 
@@ -33,11 +37,9 @@ async def update_api_key(
 ):
     """
     Save or update the Hevy API key for the current user.
-    
-    - **hevy_api_key**: Your personal Hevy API key
+    The key is encrypted before storage.
     """
-    # Update the user's API key
-    current_user.hevy_api_key = api_key_data.hevy_api_key
+    current_user.hevy_api_key = encrypt_value(api_key_data.hevy_api_key)
     db.commit()
     db.refresh(current_user)
     
@@ -52,9 +54,7 @@ async def delete_api_key(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """
-    Remove the Hevy API key for the current user.
-    """
+    """Remove the Hevy API key for the current user."""
     current_user.hevy_api_key = None
     db.commit()
     db.refresh(current_user)
@@ -62,4 +62,42 @@ async def delete_api_key(
     return ApiKeyResponse(
         message="API key removed successfully",
         has_api_key=False
+    )
+
+
+@router.post("/yazio", response_model=YazioCredentialsResponse)
+async def update_yazio_credentials(
+    creds: YazioCredentialsUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Save or update Yazio credentials for the current user.
+    Credentials are encrypted before storage.
+    """
+    current_user.yazio_email = encrypt_value(creds.yazio_email)
+    current_user.yazio_password = encrypt_value(creds.yazio_password)
+    db.commit()
+    db.refresh(current_user)
+
+    return YazioCredentialsResponse(
+        message="Yazio credentials saved successfully",
+        has_yazio=True
+    )
+
+
+@router.delete("/yazio", response_model=YazioCredentialsResponse)
+async def delete_yazio_credentials(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Remove Yazio credentials for the current user."""
+    current_user.yazio_email = None
+    current_user.yazio_password = None
+    db.commit()
+    db.refresh(current_user)
+
+    return YazioCredentialsResponse(
+        message="Yazio credentials removed successfully",
+        has_yazio=False
     )

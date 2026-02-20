@@ -1,47 +1,21 @@
 /**
  * API utility for communicating with the FastAPI backend.
- * Handles authentication tokens and common request patterns.
  */
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_URL = import.meta.env.VITE_API_URL || 'https://hevy-ai-coach-production.up.railway.app';
 
-/**
- * Get the stored auth token from localStorage.
- */
-export const getToken = (): string | null => {
-  return localStorage.getItem('token');
-};
+/* ── Token helpers ──────────────────────────────────────── */
 
-/**
- * Set the auth token in localStorage.
- */
-export const setToken = (token: string): void => {
-  localStorage.setItem('token', token);
-};
+export const getToken  = (): string | null => localStorage.getItem('token');
+export const setToken  = (t: string): void => { localStorage.setItem('token', t); };
+export const removeToken = (): void        => { localStorage.removeItem('token'); };
+export const isAuthenticated = (): boolean => getToken() !== null;
 
-/**
- * Remove the auth token from localStorage.
- */
-export const removeToken = (): void => {
-  localStorage.removeItem('token');
-};
+/* ── Generic request ────────────────────────────────────── */
 
-/**
- * Check if user is authenticated.
- */
-export const isAuthenticated = (): boolean => {
-  return getToken() !== null;
-};
-
-/**
- * Generic API request function with authentication support.
- */
-async function apiRequest<T>(
-  endpoint: string,
-  options: RequestInit = {}
-): Promise<T> {
+async function apiRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
-  
+
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
     ...options.headers,
@@ -51,116 +25,54 @@ async function apiRequest<T>(
     (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_URL}${endpoint}`, {
-    ...options,
-    headers,
-  });
+  const res = await fetch(`${API_URL}${endpoint}`, { ...options, headers });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: 'Request failed' }));
+    throw new Error(err.detail || `Error ${res.status}`);
   }
 
-  return response.json();
+  return res.json();
 }
 
-// ============ Auth API ============
+/* ── Auth endpoints ─────────────────────────────────────── */
 
-interface RegisterData {
-  username: string;
-  password: string;
-}
+export const registerUser = (username: string, password: string) =>
+  apiRequest<{ message: string }>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
 
-interface LoginData {
-  username: string;
-  password: string;
-}
+export const loginUser = async (username: string, password: string) => {
+  const data = await apiRequest<{ access_token: string; token_type: string }>('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+  });
+  setToken(data.access_token);
+  return data;
+};
 
-interface TokenResponse {
-  access_token: string;
-  token_type: string;
-}
+export const logoutUser = () => { removeToken(); };
 
-interface MessageResponse {
-  message: string;
-}
+/* ── User endpoints ─────────────────────────────────────── */
 
-export interface UserResponse {
+export interface UserInfo {
   id: string;
   username: string;
-  has_api_key: boolean;
+  has_hevy_key: boolean;
+  has_yazio: boolean;
 }
 
-interface ApiKeyResponse {
-  message: string;
-  has_api_key: boolean;
-}
+export const getMe = () => apiRequest<UserInfo>('/user/me');
 
-/**
- * Register a new user.
- */
-export const register = async (data: RegisterData): Promise<MessageResponse> => {
-  return apiRequest<MessageResponse>('/auth/register', {
+export const saveApiKey = (hevy_api_key: string) =>
+  apiRequest<{ message: string; has_api_key: boolean }>('/user/api-key', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify({ hevy_api_key }),
   });
-};
 
-/**
- * Login user and store token.
- */
-export const login = async (data: LoginData): Promise<TokenResponse> => {
-  const response = await apiRequest<TokenResponse>('/auth/login', {
+export const saveYazioCredentials = (yazio_email: string, yazio_password: string) =>
+  apiRequest<{ message: string; has_yazio: boolean }>('/user/yazio', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify({ yazio_email, yazio_password }),
   });
-  
-  setToken(response.access_token);
-  return response;
-};
-
-/**
- * Logout user by removing token.
- */
-export const logout = (): void => {
-  removeToken();
-};
-
-/**
- * Get current user info.
- */
-export const getCurrentUser = async (): Promise<UserResponse> => {
-  return apiRequest<UserResponse>('/user/me');
-};
-
-/**
- * Update Hevy API key.
- */
-export const updateApiKey = async (apiKey: string): Promise<ApiKeyResponse> => {
-  return apiRequest<ApiKeyResponse>('/user/api-key', {
-    method: 'POST',
-    body: JSON.stringify({ hevy_api_key: apiKey }),
-  });
-};
-
-/**
- * Delete Hevy API key.
- */
-export const deleteApiKey = async (): Promise<ApiKeyResponse> => {
-  return apiRequest<ApiKeyResponse>('/user/api-key', {
-    method: 'DELETE',
-  });
-};
-
-export default {
-  register,
-  login,
-  logout,
-  getCurrentUser,
-  updateApiKey,
-  deleteApiKey,
-  isAuthenticated,
-  getToken,
-  setToken,
-  removeToken,
-};
