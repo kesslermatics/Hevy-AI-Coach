@@ -86,8 +86,6 @@ async def main():
         # Step 2: Generate briefing
         print("🤖 Calling Gemini (gemini-3-flash-preview)...")
         briefing = await generate_daily_briefing(
-            user_goal=user.current_goal,
-            target_weight=user.target_weight,
             yazio_data=yazio,
             hevy_data=hevy,
         )
@@ -96,17 +94,43 @@ async def main():
         print("═" * 55)
         print("  🌅  DAILY MORNING BRIEFING")
         print("═" * 55)
-        print()
-        print(f"  💪 Readiness Score: {briefing.get('readiness_score', '?')}/100")
-        print()
-        print(f"  🍽️  Nutrition Review:")
-        print(f"     {briefing.get('nutrition_review', 'N/A')}")
-        print()
-        print(f"  🏋️  Workout Suggestion:")
+
+        # Nutrition Review
+        nr = briefing.get("nutrition_review", {})
+        if isinstance(nr, dict):
+            print()
+            print(f"  � Calories: {nr.get('calories', 'N/A')}")
+            print(f"  🥩 Protein:  {nr.get('protein', 'N/A')}")
+            print(f"  🌾 Carbs:    {nr.get('carbs', 'N/A')}")
+            print(f"  💧 Fat:      {nr.get('fat', 'N/A')}")
+        else:
+            print(f"\n  🍽️  Nutrition: {nr}")
+
+        print(f"\n  🏋️  Workout Suggestion:")
         print(f"     {briefing.get('workout_suggestion', 'N/A')}")
-        print()
-        print(f"  🎯 Daily Mission:")
+
+        print(f"\n  🎯 Daily Mission:")
         print(f"     {briefing.get('daily_mission', 'N/A')}")
+
+        # Last Session
+        ls = briefing.get("last_session")
+        if ls:
+            print(f"\n  🏆 Last Session: {ls.get('title', '?')} ({ls.get('date', '?')})")
+            print(f"     {ls.get('overall_feedback', '')}")
+            for ex in ls.get("exercises", []):
+                trend_icon = {"up": "↑", "down": "↓", "stable": "→", "new": "✨"}.get(ex.get("trend", ""), "?")
+                print(f"     • {ex.get('name', '?')} [{ex.get('rank', '?')}] {trend_icon} "
+                      f"— Best: {ex.get('best_set', '?')} | Vol: {ex.get('total_volume_kg', 0)} kg")
+                print(f"       {ex.get('feedback', '')}")
+
+        # Next Session
+        ns = briefing.get("next_session")
+        if ns:
+            print(f"\n  🎯 Next Session: {ns.get('title', '?')}")
+            print(f"     {ns.get('reasoning', '')}")
+            print(f"     Focus: {', '.join(ns.get('focus_muscles', []))}")
+            print(f"     Exercises: {', '.join(ns.get('suggested_exercises', []))}")
+
         print()
         print("═" * 55)
         print()
