@@ -32,6 +32,14 @@ FALLBACK_SESSION_REVIEW = {
     "next_session": None,
 }
 
+FALLBACK_WORKOUT_TIPS = {
+    "workout_title": "Unknown",
+    "summary": "Unable to generate tips right now.",
+    "exercise_tips": [],
+    "new_exercises_to_try": [],
+    "general_advice": "",
+}
+
 # CS2-style rank tiers
 RANK_TIERS = [
     "Silver I", "Silver II", "Silver III", "Silver IV",
@@ -404,3 +412,152 @@ async def generate_session_review(
     except Exception as exc:
         logger.error("Gemini API error (session review): %s", exc)
         return FALLBACK_SESSION_REVIEW
+
+
+def _build_workout_tips_prompt(profile: Optional[dict]) -> str:
+    """Build system prompt for workout-specific tips and suggestions."""
+    p = profile or {}
+    name = " ".join(filter(None, [p.get("first_name"), p.get("last_name")])) or "Athlete"
+    goal = (p.get("goal") or "general fitness").replace("_", " ")
+    sex = p.get("sex", "")
+    height = p.get("body_height_cm")
+    current_weight = p.get("current_weight_kg")
+
+    context_lines: list[str] = [f"The user's name is **{name}**."]
+    if sex:
+        context_lines.append(f"Sex: {sex}.")
+    if height:
+        context_lines.append(f"Height: {height} cm.")
+    if current_weight:
+        context_lines.append(f"Current weight: {current_weight} kg.")
+    context_lines.append(f"Goal: **{goal}**.")
+
+    user_context = "\n".join(context_lines)
+
+    return f"""You are a supportive, friendly fitness coach. Your name is Coach.
+
+=== USER PROFILE ===
+{user_context}
+
+You will receive:
+1. A SELECTED workout that the user wants tips for (marked with "=== SELECTED WORKOUT ===").
+2. The user's recent workout history for context.
+
+Your job:
+- Analyze the selected workout in detail.
+- For each exercise, give a short actionable tip (form improvement, rep range suggestion, weight progression idea).
+- Suggest 2-4 NEW exercises the user could try next time to complement or replace weaker exercises. Explain why each is useful.
+- Give a brief overall summary of the workout quality and one general piece of advice.
+- Keep it supportive, warm, and actionable. No generic filler — be specific to what they actually did.
+
+You MUST respond with valid JSON matching this exact schema:
+{{
+  "workout_title": "<string, name of the selected workout>",
+  "workout_date": "<string, date>",
+  "summary": "<string, 2-3 sentences: overall session quality + main improvement area>",
+  "exercise_tips": [
+    {{
+      "name": "<string, exercise name>",
+      "tip": "<string, ONE specific actionable tip>"
+    }}
+  ],
+  "new_exercises_to_try": [
+    {{
+      "name": "<string, exercise name to try>",
+      "why": "<string, ONE sentence explaining why this is a good addition>"
+    }}
+  ],
+  "general_advice": "<string, one motivational/practical sentence for next time>"
+}}
+
+Respond ONLY with the JSON object. No markdown, no explanation."""
+
+
+async def generate_workout_tips(
+    yazio_data: Optional[dict],
+    hevy_data: Optional[list],
+    workout_index: int,
+) -> dict:
+    """
+    Call Gemini to generate tips for a specific selected workout.
+    """
+    if not hevy_data or workout_index >= len(hevy_data):
+        return FALLBACK_WORKOUT_TIPS
+
+    client = genai.Client(api_key=settings.gemini_api_key)
+
+    profile = yazio_data.get("profile") if yazio_data else None
+    system_prompt = _build_workout_tips_prompt(profile)
+
+    # Build user message: selected workout highlighted + context
+    selected = hevy_data[workout_index]
+    parts: list[str] = []
+    parts.append("=== SELECTED WORKOUT (analyze this one) ===")
+    parts.append(_format_workout(selected))
+    parts.append("")
+    parts.append(f"=== RECENT WORKOUT HISTORY ({len(hevy_data)} total, for context) ===")
+    for i, w in enumerate(hevy_data):
+        if i == workout_index:
+            continue
+        parts.append(f"\nWorkout {i + 1}:")
+        parts.append(_format_workout(w))
+
+    user_message = "\n".join(parts)
+
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=user_message,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.7,
+                max_output_tokens=4096,
+                response_mime_type="application/json",
+            ),
+        )
+
+        raw_content = response.text
+        if not raw_content:
+            logger.error("Gemini returned empty content for workout tips")
+            return FALLBACK_WORKOUT_TIPS
+
+        cleaned = re.sub(r"^```(?:json)?\s*", "", raw_content.strip())
+        cleaned = re.sub(r"\s*```$", "", cleaned)
+
+        parsed = json.loads(cleaned)
+
+        # Ensure arrays exist
+        if "exercise_tips" not in parsed:
+            parsed["exercise_tips"] = []
+        if "new_exercises_to_try" not in parsed:
+            parsed["new_exercises_to_try"] = []
+
+        return parsed
+
+    except json.JSONDecodeError as exc:
+        logger.error("Failed to parse workout tips JSON: %s — raw: %s", exc, raw_content[:500])
+        return FALLBACK_WORKOUT_TIPS
+    except Exception as exc:
+        logger.error("Gemini API error (workout tips): %s", exc)
+        return FALLBACK_WORKOUT_TIPS
+
+
+def _format_workout(w: dict) -> str:
+    """Format a single workout dict into a readable string for the AI."""
+    dur = f" ({w['duration_min']} min)" if w.get("duration_min") else ""
+    lines = [f"{w.get('title', 'Untitled')}{dur} — {w.get('start_time', '?')}"]
+    for ex in w.get("exercises", []):
+        sets_summary = []
+        for s in ex.get("sets", []):
+            weight = s.get("weight_kg")
+            reps = s.get("reps")
+            if weight is not None and reps is not None:
+                sets_summary.append(f"{weight}kg×{reps}")
+            elif reps is not None:
+                sets_summary.append(f"{reps} reps")
+            elif s.get("duration_seconds"):
+                sets_summary.append(f"{s['duration_seconds']}s")
+        sets_str = ", ".join(sets_summary) if sets_summary else "no set data"
+        muscle = f" [{ex.get('muscle_group')}]" if ex.get("muscle_group") else ""
+        lines.append(f"  • {ex.get('title', '?')}{muscle}: {sets_str}")
+    return "\n".join(lines)

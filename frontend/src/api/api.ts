@@ -155,3 +155,41 @@ export const regenerateBriefing = () =>
 
 export const getSessionReview = () =>
   apiRequest<SessionReviewData>('/api/briefing/session-review', { method: 'POST' });
+
+/* ── Workout picker + tips ──────────────────────────────── */
+
+export interface WorkoutListItem {
+  index: number;
+  title: string;
+  date: string;
+  duration_min: number | null;
+  exercise_names: string[];
+}
+
+export interface ExerciseTip {
+  name: string;
+  tip: string;
+}
+
+export interface NewExerciseSuggestion {
+  name: string;
+  why: string;
+}
+
+export interface WorkoutTips {
+  workout_title: string;
+  workout_date: string;
+  summary: string;
+  exercise_tips: ExerciseTip[];
+  new_exercises_to_try: NewExerciseSuggestion[];
+  general_advice: string;
+}
+
+export const getWorkoutList = () =>
+  apiRequest<WorkoutListItem[]>('/api/briefing/workouts');
+
+export const getWorkoutTips = (workout_index: number) =>
+  apiRequest<WorkoutTips>('/api/briefing/workout-tips', {
+    method: 'POST',
+    body: JSON.stringify({ workout_index }),
+  });

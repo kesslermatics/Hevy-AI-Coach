@@ -3,8 +3,10 @@ Briefing routes – serves the Daily Morning Briefing to the frontend.
 """
 import logging
 from datetime import date
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -12,7 +14,7 @@ from app.dependencies import get_current_user
 from app.models import User, MorningBriefing
 from app.schemas import BriefingResponse
 from app.services.aggregator import gather_user_context
-from app.services.ai_service import generate_daily_briefing, generate_session_review
+from app.services.ai_service import generate_daily_briefing, generate_session_review, generate_workout_tips
 
 logger = logging.getLogger(__name__)
 
@@ -118,7 +120,7 @@ async def get_session_review(
     db: Session = Depends(get_db),
 ):
     """
-    On-demand session review — called when the user opens the modal.
+    On-demand session review — called when the user opens the Last Session modal.
     Makes a fresh Gemini call every time (not cached).
     Returns last_session + next_session analysis.
     """
@@ -127,6 +129,62 @@ async def get_session_review(
     result = await generate_session_review(
         yazio_data=context["yazio"],
         hevy_data=context["hevy"],
+    )
+
+    return result
+
+
+@router.get("/workouts")
+async def get_workout_list(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Return the user's recent workouts as a lightweight list for the picker.
+    No AI involved – just fetches from Hevy.
+    """
+    context = await gather_user_context(current_user)
+    workouts = context.get("hevy") or []
+
+    # Return a simplified list with index, title, date, exercises, duration
+    result = []
+    for i, w in enumerate(workouts):
+        exercise_names = [ex.get("title", "?") for ex in w.get("exercises", [])]
+        result.append({
+            "index": i,
+            "title": w.get("title", "Workout"),
+            "date": (w.get("start_time") or "")[:10],
+            "duration_min": w.get("duration_min"),
+            "exercise_names": exercise_names,
+        })
+
+    return result
+
+
+class WorkoutTipsRequest(BaseModel):
+    workout_index: int
+
+
+@router.post("/workout-tips")
+async def get_workout_tips(
+    body: WorkoutTipsRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    On-demand workout tips — user picks a workout from the list,
+    and we call Gemini to analyze it and suggest improvements.
+    """
+    context = await gather_user_context(current_user)
+    workouts = context.get("hevy") or []
+
+    if body.workout_index < 0 or body.workout_index >= len(workouts):
+        raise HTTPException(status_code=400, detail="Invalid workout index")
+
+    result = await generate_workout_tips(
+        yazio_data=context["yazio"],
+        hevy_data=workouts,
+        workout_index=body.workout_index,
     )
 
     return result

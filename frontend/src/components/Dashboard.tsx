@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getTodayBriefing, regenerateBriefing, getSessionReview } from '../api/api';
-import type { UserInfo, Briefing, SessionReviewData, ExerciseReview } from '../api/api';
+import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips } from '../api/api';
+import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutListItem, WorkoutTips } from '../api/api';
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
-    Trophy, Crosshair, Star, X
+    Trophy, Crosshair, Star, X, ArrowLeft, Clock, Lightbulb, Plus
 } from 'lucide-react';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
@@ -44,6 +44,13 @@ export default function Dashboard() {
     const [sessionLoading, setSessionLoading] = useState(false);
     const [sessionError, setSessionError] = useState<string | null>(null);
 
+    // Next Session (workout picker) state
+    const [workoutList, setWorkoutList] = useState<WorkoutListItem[] | null>(null);
+    const [workoutsLoading, setWorkoutsLoading] = useState(false);
+    const [selectedWorkoutTips, setSelectedWorkoutTips] = useState<WorkoutTips | null>(null);
+    const [tipsLoading, setTipsLoading] = useState(false);
+    const [tipsError, setTipsError] = useState<string | null>(null);
+
     const fetchBriefing = async () => {
         setError(null);
         try {
@@ -70,8 +77,7 @@ export default function Dashboard() {
 
     const openSessionModal = async (tab: 'last' | 'next') => {
         setModalOpen(tab);
-        // Only fetch if we don't have data yet
-        if (!sessionReview) {
+        if (tab === 'last' && !sessionReview) {
             setSessionLoading(true);
             setSessionError(null);
             try {
@@ -83,6 +89,37 @@ export default function Dashboard() {
                 setSessionLoading(false);
             }
         }
+        if (tab === 'next' && !workoutList) {
+            setWorkoutsLoading(true);
+            try {
+                const list = await getWorkoutList();
+                setWorkoutList(list);
+            } catch {
+                // silently fail — empty list shown
+            } finally {
+                setWorkoutsLoading(false);
+            }
+        }
+    };
+
+    const handleSelectWorkout = async (index: number) => {
+        setTipsLoading(true);
+        setTipsError(null);
+        setSelectedWorkoutTips(null);
+        try {
+            const tips = await getWorkoutTips(index);
+            setSelectedWorkoutTips(tips);
+        } catch (err: any) {
+            setTipsError(err.message || 'Failed to load tips');
+        } finally {
+            setTipsLoading(false);
+        }
+    };
+
+    const closeModal = () => {
+        setModalOpen(null);
+        setSelectedWorkoutTips(null);
+        setTipsError(null);
     };
 
     useEffect(() => { fetchBriefing(); }, []);
@@ -189,8 +226,8 @@ export default function Dashboard() {
                             <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                                 <Crosshair className="w-5 h-5 text-blue-400" />
                             </div>
-                            <h3 className="text-sm font-semibold text-cream-50 mb-1">Next Session</h3>
-                            <p className="text-xs text-dark-300">AI-powered workout plan</p>
+                            <h3 className="text-sm font-semibold text-cream-50 mb-1">Workout Tips</h3>
+                            <p className="text-xs text-dark-300">Pick a session for AI coaching</p>
                         </button>
                     </div>
 
@@ -211,14 +248,21 @@ export default function Dashboard() {
             {modalOpen && (
                 <SessionModal
                     tab={modalOpen}
-                    onTabChange={setModalOpen}
-                    onClose={() => setModalOpen(null)}
-                    data={sessionReview}
-                    loading={sessionLoading}
-                    error={sessionError}
-                    onRetry={() => {
+                    onTabChange={(t) => { setSelectedWorkoutTips(null); setTipsError(null); openSessionModal(t); }}
+                    onClose={closeModal}
+                    sessionData={sessionReview}
+                    sessionLoading={sessionLoading}
+                    sessionError={sessionError}
+                    workoutList={workoutList}
+                    workoutsLoading={workoutsLoading}
+                    selectedWorkoutTips={selectedWorkoutTips}
+                    tipsLoading={tipsLoading}
+                    tipsError={tipsError}
+                    onSelectWorkout={handleSelectWorkout}
+                    onBackToList={() => { setSelectedWorkoutTips(null); setTipsError(null); }}
+                    onRetrySession={() => {
                         setSessionReview(null);
-                        openSessionModal(modalOpen);
+                        openSessionModal('last');
                     }}
                 />
             )}
@@ -230,14 +274,23 @@ export default function Dashboard() {
    SESSION REVIEW MODAL
    ═══════════════════════════════════════════════════════ */
 
-function SessionModal({ tab, onTabChange, onClose, data, loading, error, onRetry }: {
+function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, sessionError,
+    workoutList, workoutsLoading, selectedWorkoutTips, tipsLoading, tipsError,
+    onSelectWorkout, onBackToList, onRetrySession }: {
     tab: 'last' | 'next';
     onTabChange: (t: 'last' | 'next') => void;
     onClose: () => void;
-    data: SessionReviewData | null;
-    loading: boolean;
-    error: string | null;
-    onRetry: () => void;
+    sessionData: SessionReviewData | null;
+    sessionLoading: boolean;
+    sessionError: string | null;
+    workoutList: WorkoutListItem[] | null;
+    workoutsLoading: boolean;
+    selectedWorkoutTips: WorkoutTips | null;
+    tipsLoading: boolean;
+    tipsError: string | null;
+    onSelectWorkout: (index: number) => void;
+    onBackToList: () => void;
+    onRetrySession: () => void;
 }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
@@ -264,7 +317,7 @@ function SessionModal({ tab, onTabChange, onClose, data, loading, error, onRetry
                                     ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                                     : 'text-dark-300 hover:text-cream-100'
                                 }`}>
-                            <Crosshair size={12} className="inline mr-1.5" />Next Session
+                            <Crosshair size={12} className="inline mr-1.5" />Workout Tips
                         </button>
                     </div>
                     <button onClick={onClose}
@@ -275,26 +328,53 @@ function SessionModal({ tab, onTabChange, onClose, data, loading, error, onRetry
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-5">
-                    {loading && (
-                        <div className="py-16 text-center space-y-3">
-                            <Loader2 className="w-8 h-8 text-gold-400 animate-spin mx-auto" />
-                            <p className="text-dark-300 text-sm">Analyzing your workouts…</p>
-                            <p className="text-dark-400 text-xs">This may take a few seconds</p>
-                        </div>
+                    {tab === 'last' && (
+                        <>
+                            {sessionLoading && <ModalLoader text="Analyzing your last session…" />}
+                            {sessionError && !sessionLoading && (
+                                <ModalError message={sessionError} onRetry={onRetrySession} />
+                            )}
+                            {sessionData && !sessionLoading && !sessionError && (
+                                <LastSessionContent session={sessionData.last_session} />
+                            )}
+                        </>
                     )}
-                    {error && !loading && (
-                        <div className="py-16 text-center space-y-3">
-                            <p className="text-red-400 text-sm">{error}</p>
-                            <button onClick={onRetry} className="btn-gold text-sm px-6 py-2">Retry</button>
-                        </div>
-                    )}
-                    {data && !loading && !error && (
-                        tab === 'last'
-                            ? <LastSessionContent session={data.last_session} />
-                            : <NextSessionContent session={data.next_session} />
+                    {tab === 'next' && (
+                        <>
+                            {selectedWorkoutTips ? (
+                                <WorkoutTipsContent tips={selectedWorkoutTips} onBack={onBackToList} />
+                            ) : tipsLoading ? (
+                                <ModalLoader text="Generating tips for this workout…" />
+                            ) : tipsError ? (
+                                <ModalError message={tipsError} onRetry={onBackToList} />
+                            ) : workoutsLoading ? (
+                                <ModalLoader text="Loading your workouts…" />
+                            ) : (
+                                <WorkoutPicker workouts={workoutList || []} onSelect={onSelectWorkout} />
+                            )}
+                        </>
                     )}
                 </div>
             </div>
+        </div>
+    );
+}
+
+function ModalLoader({ text }: { text: string }) {
+    return (
+        <div className="py-16 text-center space-y-3">
+            <Loader2 className="w-8 h-8 text-gold-400 animate-spin mx-auto" />
+            <p className="text-dark-300 text-sm">{text}</p>
+            <p className="text-dark-400 text-xs">This may take a few seconds</p>
+        </div>
+    );
+}
+
+function ModalError({ message, onRetry }: { message: string; onRetry: () => void }) {
+    return (
+        <div className="py-16 text-center space-y-3">
+            <p className="text-red-400 text-sm">{message}</p>
+            <button onClick={onRetry} className="btn-gold text-sm px-6 py-2">Retry</button>
         </div>
     );
 }
@@ -442,43 +522,121 @@ function ProgressionChart({ history, currentVolume }: {
     );
 }
 
-/* ── Next Session Content ───────────────────────────── */
+/* ── Workout Picker (list of workouts to choose from) ── */
 
-function NextSessionContent({ session }: { session: SessionReviewData['next_session'] }) {
-    if (!session) {
-        return <p className="text-dark-300 text-sm text-center py-8">No suggestion available yet.</p>;
+function WorkoutPicker({ workouts, onSelect }: {
+    workouts: WorkoutListItem[];
+    onSelect: (index: number) => void;
+}) {
+    if (workouts.length === 0) {
+        return <p className="text-dark-300 text-sm text-center py-8">No workouts found.</p>;
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-3">
             <div>
-                <h3 className="text-lg font-semibold text-cream-50">{session.title}</h3>
+                <h3 className="text-lg font-semibold text-cream-50">Pick a workout</h3>
+                <p className="text-xs text-dark-300 mt-0.5">Select a session to get AI-powered tips & suggestions</p>
             </div>
-            <p className="text-cream-200 text-sm leading-relaxed">{session.reasoning}</p>
-
-            {/* Focus muscles */}
-            <div>
-                <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2">Focus Muscles</p>
-                <div className="flex flex-wrap gap-2">
-                    {session.focus_muscles.map((m, i) => (
-                        <span key={i} className="inline-flex items-center gap-1 text-xs font-medium px-2.5 py-1 rounded-full bg-blue-500/15 border border-blue-500/30 text-blue-300">
-                            <Star size={10} />{m}
-                        </span>
-                    ))}
-                </div>
-            </div>
-
-            {/* Suggested exercises */}
-            <div>
-                <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2">Suggested Exercises</p>
-                <div className="space-y-1.5">
-                    {session.suggested_exercises.map((ex, i) => (
-                        <div key={i} className="flex items-center gap-2.5 text-sm text-cream-200 bg-dark-700/40 rounded-lg px-3 py-2 border border-dark-500/20">
-                            <Dumbbell size={13} className="text-dark-300 shrink-0" />{ex}
+            <div className="space-y-2">
+                {workouts.map((w) => (
+                    <button key={w.index} onClick={() => onSelect(w.index)}
+                        className="w-full text-left bg-dark-700/40 hover:bg-dark-700/60 backdrop-blur-sm rounded-xl border border-dark-500/30 hover:border-blue-500/30 p-4 transition-all cursor-pointer group">
+                        <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-sm font-medium text-cream-50 group-hover:text-blue-300 transition-colors">{w.title}</span>
+                            <div className="flex items-center gap-2 text-[11px] text-dark-400">
+                                {w.duration_min && (
+                                    <span className="flex items-center gap-1"><Clock size={10} />{w.duration_min}m</span>
+                                )}
+                                <span>{w.date}</span>
+                            </div>
                         </div>
-                    ))}
-                </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {w.exercise_names.slice(0, 5).map((name, i) => (
+                                <span key={i} className="text-[10px] text-dark-300 bg-dark-600/50 px-2 py-0.5 rounded-full">
+                                    {name}
+                                </span>
+                            ))}
+                            {w.exercise_names.length > 5 && (
+                                <span className="text-[10px] text-dark-400 px-2 py-0.5">+{w.exercise_names.length - 5} more</span>
+                            )}
+                        </div>
+                    </button>
+                ))}
             </div>
+        </div>
+    );
+}
+
+/* ── Workout Tips Content (AI result) ───────────────── */
+
+function WorkoutTipsContent({ tips, onBack }: {
+    tips: WorkoutTips;
+    onBack: () => void;
+}) {
+    return (
+        <div className="space-y-4">
+            {/* Back button + header */}
+            <div>
+                <button onClick={onBack}
+                    className="flex items-center gap-1.5 text-xs text-dark-300 hover:text-cream-100 transition-colors mb-2 cursor-pointer">
+                    <ArrowLeft size={12} />Back to workouts
+                </button>
+                <h3 className="text-lg font-semibold text-cream-50">{tips.workout_title}</h3>
+                {tips.workout_date && (
+                    <p className="text-xs text-dark-300 mt-0.5">{tips.workout_date}</p>
+                )}
+            </div>
+
+            {/* Summary */}
+            <p className="text-cream-200 text-sm leading-relaxed">{tips.summary}</p>
+
+            {/* Exercise Tips */}
+            {tips.exercise_tips.length > 0 && (
+                <div>
+                    <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <Lightbulb size={10} />Tips per exercise
+                    </p>
+                    <div className="space-y-2">
+                        {tips.exercise_tips.map((et, i) => (
+                            <div key={i} className="bg-dark-700/40 rounded-lg border border-dark-500/20 p-3">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Dumbbell size={12} className="text-dark-300 shrink-0" />
+                                    <span className="text-xs font-medium text-cream-50">{et.name}</span>
+                                </div>
+                                <p className="text-cream-200 text-xs leading-relaxed pl-5">{et.tip}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* New exercises to try */}
+            {tips.new_exercises_to_try.length > 0 && (
+                <div>
+                    <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                        <Plus size={10} />New exercises to try
+                    </p>
+                    <div className="space-y-2">
+                        {tips.new_exercises_to_try.map((ne, i) => (
+                            <div key={i} className="bg-blue-500/5 rounded-lg border border-blue-500/20 p-3">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <Star size={12} className="text-blue-400 shrink-0" />
+                                    <span className="text-xs font-medium text-blue-300">{ne.name}</span>
+                                </div>
+                                <p className="text-cream-200 text-xs leading-relaxed pl-5">{ne.why}</p>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* General advice */}
+            {tips.general_advice && (
+                <div className="bg-gold-500/5 border border-gold-500/20 rounded-lg p-3">
+                    <p className="text-cream-100 text-xs leading-relaxed italic">💡 {tips.general_advice}</p>
+                </div>
+            )}
         </div>
     );
 }
