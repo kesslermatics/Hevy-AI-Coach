@@ -114,10 +114,17 @@ class GoalResponse(BaseModel):
 
 # ============ Briefing Schemas ============
 
+class NutritionReview(BaseModel):
+    """Per-macro nutrition breakdown from the AI."""
+    calories: str
+    protein: str
+    carbs: str
+    fat: str
+
+
 class BriefingData(BaseModel):
     """The AI-generated briefing payload."""
-    readiness_score: int = Field(..., ge=0, le=100)
-    nutrition_review: str
+    nutrition_review: NutritionReview
     workout_suggestion: str
     daily_mission: str
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { getTodayBriefing, regenerateBriefing } from '../api/api';
 import type { UserInfo, Briefing } from '../api/api';
-import { Brain, Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise, Zap } from 'lucide-react';
+import { Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise, Flame, Beef, Wheat, Droplets } from 'lucide-react';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
 
@@ -40,7 +40,6 @@ export default function Dashboard() {
     useEffect(() => { fetchBriefing(); }, []);
 
     const data = briefing?.briefing_data;
-    const score = data?.readiness_score ?? 0;
 
     return (
         <div className="max-w-2xl mx-auto space-y-6">
@@ -87,43 +86,48 @@ export default function Dashboard() {
             {/* Briefing content */}
             {data && !loading && (
                 <>
-                    {/* Readiness Score */}
+                    {/* Nutrition Review — Macro Breakdown */}
                     <div className="card-glass p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold-500/20 to-gold-700/20 border border-gold-500/30 flex items-center justify-center">
-                                    <Zap className="w-5 h-5 text-gold-400" />
-                                </div>
-                                <div>
-                                    <h2 className="text-sm font-semibold text-cream-50">Readiness Score</h2>
-                                    <p className="text-xs text-dark-300">Based on recovery & nutrition</p>
-                                </div>
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-amber-500/10 border-amber-500/30 text-amber-400">
+                                <UtensilsCrossed className="w-5 h-5" />
                             </div>
-                            <div className="text-right">
-                                <span className={`text-3xl font-bold ${score >= 75 ? 'text-green-400' : score >= 50 ? 'text-gold-400' : 'text-red-400'}`}>
-                                    {score}
-                                </span>
-                                <span className="text-dark-300 text-sm">/100</span>
+                            <div>
+                                <h2 className="text-sm font-semibold text-cream-50">Nutrition Review</h2>
+                                <p className="text-xs text-dark-300">Yesterday's nutrition breakdown</p>
                             </div>
                         </div>
-                        {/* Progress bar */}
-                        <div className="w-full h-2 rounded-full bg-dark-600 overflow-hidden">
-                            <div
-                                className={`h-full rounded-full transition-all duration-1000 ${score >= 75 ? 'bg-green-500' : score >= 50 ? 'bg-gold-500' : 'bg-red-500'}`}
-                                style={{ width: `${score}%` }}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <MacroCard
+                                icon={<Flame className="w-4 h-4" />}
+                                label="Calories"
+                                text={data.nutrition_review.calories}
+                                color="text-orange-400"
+                                bg="bg-orange-500/10 border-orange-500/20"
+                            />
+                            <MacroCard
+                                icon={<Beef className="w-4 h-4" />}
+                                label="Protein"
+                                text={data.nutrition_review.protein}
+                                color="text-red-400"
+                                bg="bg-red-500/10 border-red-500/20"
+                            />
+                            <MacroCard
+                                icon={<Wheat className="w-4 h-4" />}
+                                label="Carbs"
+                                text={data.nutrition_review.carbs}
+                                color="text-yellow-400"
+                                bg="bg-yellow-500/10 border-yellow-500/20"
+                            />
+                            <MacroCard
+                                icon={<Droplets className="w-4 h-4" />}
+                                label="Fat"
+                                text={data.nutrition_review.fat}
+                                color="text-emerald-400"
+                                bg="bg-emerald-500/10 border-emerald-500/20"
                             />
                         </div>
                     </div>
-
-                    {/* Nutrition Review */}
-                    <BriefingCard
-                        icon={<UtensilsCrossed className="w-5 h-5" />}
-                        title="Nutrition Review"
-                        subtitle="Yesterday's nutrition"
-                        content={data.nutrition_review}
-                        accentColor="text-amber-400"
-                        bgColor="bg-amber-500/10 border-amber-500/30"
-                    />
 
                     {/* Workout Suggestion */}
                     <BriefingCard
@@ -145,16 +149,6 @@ export default function Dashboard() {
                             "{data.daily_mission}"
                         </p>
                     </div>
-
-                    {/* Current Goal pill */}
-                    {user?.current_goal && (
-                        <div className="text-center">
-                            <span className="inline-flex items-center gap-2 bg-dark-700/60 border border-dark-500/50 text-dark-300 text-xs font-medium px-4 py-2 rounded-full">
-                                <Brain size={12} />
-                                Goal: {user.current_goal.replace(/_/g, ' ')}
-                            </span>
-                        </div>
-                    )}
                 </>
             )}
         </div>
@@ -162,6 +156,21 @@ export default function Dashboard() {
 }
 
 /* ── Helpers ─────────────────────────────────────────── */
+
+function MacroCard({ icon, label, text, color, bg }: {
+    icon: React.ReactNode; label: string; text: string;
+    color: string; bg: string;
+}) {
+    return (
+        <div className={`rounded-xl border p-3 ${bg}`}>
+            <div className={`flex items-center gap-2 mb-1.5 ${color}`}>
+                {icon}
+                <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
+            </div>
+            <p className="text-cream-200 text-xs leading-relaxed">{text}</p>
+        </div>
+    );
+}
 
 function BriefingCard({ icon, title, subtitle, content, accentColor, bgColor }: {
     icon: React.ReactNode; title: string; subtitle: string; content: string;

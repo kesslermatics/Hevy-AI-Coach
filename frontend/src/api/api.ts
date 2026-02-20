@@ -89,9 +89,15 @@ export const saveGoal = (current_goal: string, target_weight?: number | null) =>
 
 /* ── Briefing endpoints ─────────────────────────────────── */
 
+export interface NutritionReview {
+  calories: string;
+  protein: string;
+  carbs: string;
+  fat: string;
+}
+
 export interface BriefingData {
-  readiness_score: number;
-  nutrition_review: string;
+  nutrition_review: NutritionReview;
   workout_suggestion: string;
   daily_mission: string;
 }

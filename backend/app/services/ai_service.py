@@ -17,8 +17,12 @@ logger = logging.getLogger(__name__)
 
 # Default fallback when AI fails
 FALLBACK_BRIEFING = {
-    "readiness_score": 50,
-    "nutrition_review": "Unable to generate nutrition review — please check your Yazio connection.",
+    "nutrition_review": {
+        "calories": "Unable to load calorie data.",
+        "protein": "Unable to load protein data.",
+        "carbs": "Unable to load carbs data.",
+        "fat": "Unable to load fat data.",
+    },
     "workout_suggestion": "Unable to generate workout suggestion — please check your Hevy connection.",
     "daily_mission": "Stay consistent and keep tracking your progress! 💪",
 }
@@ -86,8 +90,12 @@ Your job:
 
 You MUST respond with valid JSON matching this exact schema:
 {{
-  "readiness_score": <int 0-100, overall readiness based on recovery + nutrition>,
-  "nutrition_review": "<string, 2-4 sentences reviewing yesterday's food>",
+  "nutrition_review": {{
+    "calories": "<string, 1-2 sentences about calorie intake vs goal>",
+    "protein": "<string, 1-2 sentences about protein intake vs target>",
+    "carbs": "<string, 1-2 sentences about carb intake>",
+    "fat": "<string, 1-2 sentences about fat intake>"
+  }},
   "workout_suggestion": "<string, 2-4 sentences suggesting today's training focus with reasoning>",
   "daily_mission": "<string, one motivational sentence or actionable micro-goal for today>"
 }}
@@ -205,14 +213,26 @@ async def generate_daily_briefing(
         parsed = json.loads(cleaned)
 
         # Validate required keys exist
-        required_keys = {"readiness_score", "nutrition_review", "workout_suggestion", "daily_mission"}
+        required_keys = {"nutrition_review", "workout_suggestion", "daily_mission"}
         if not required_keys.issubset(parsed.keys()):
             missing = required_keys - set(parsed.keys())
             logger.warning("AI response missing keys: %s", missing)
             return {**FALLBACK_BRIEFING, **parsed}
 
-        # Clamp readiness score
-        parsed["readiness_score"] = max(0, min(100, int(parsed["readiness_score"])))
+        # Ensure nutrition_review is a dict with the expected sub-keys
+        nr = parsed.get("nutrition_review")
+        if isinstance(nr, str):
+            # AI returned a single string instead of the object — wrap it
+            parsed["nutrition_review"] = {
+                "calories": nr,
+                "protein": "",
+                "carbs": "",
+                "fat": "",
+            }
+        elif isinstance(nr, dict):
+            for k in ("calories", "protein", "carbs", "fat"):
+                if k not in nr:
+                    nr[k] = ""
 
         return parsed
 
