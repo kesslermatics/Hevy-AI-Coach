@@ -44,7 +44,7 @@ async def gather_user_context(user: User) -> dict:
     if user.hevy_api_key:
         try:
             api_key = decrypt_value(user.hevy_api_key)
-            hevy_data = await fetch_recent_workouts(api_key, count=5)
+            hevy_data = await fetch_recent_workouts(api_key, count=20)
         except Exception as exc:
             logger.error("Failed to gather Hevy data for user %s: %s", user.id, exc)
     else:

@@ -25,7 +25,18 @@ FALLBACK_BRIEFING = {
     },
     "workout_suggestion": "Unable to generate workout suggestion — please check your Hevy connection.",
     "daily_mission": "Stay consistent and keep tracking your progress! 💪",
+    "last_session": None,
+    "next_session": None,
 }
+
+# CS2-style rank tiers
+RANK_TIERS = [
+    "Silver I", "Silver II", "Silver III", "Silver IV",
+    "Gold Nova I", "Gold Nova II", "Gold Nova III", "Gold Nova Master",
+    "Master Guardian I", "Master Guardian II", "Master Guardian Elite",
+    "Distinguished Master Guardian", "Legendary Eagle", "Legendary Eagle Master",
+    "Supreme Master First Class", "Global Elite",
+]
 
 
 def _build_system_prompt(profile: Optional[dict]) -> str:
@@ -90,16 +101,62 @@ Your job:
 - Do NOT mention data that is clearly missing or zero — just skip it gracefully.
 - Keep it short, warm, and motivating. Use short sentences.
 
+RANK SYSTEM for exercise ratings:
+Rank users per exercise based on their performance relative to their age, sex, height, and weight.
+Use this CS2-style tier list (from lowest to highest):
+Silver I, Silver II, Silver III, Silver IV,
+Gold Nova I, Gold Nova II, Gold Nova III, Gold Nova Master,
+Master Guardian I, Master Guardian II, Master Guardian Elite,
+Distinguished Master Guardian, Legendary Eagle, Legendary Eagle Master,
+Supreme Master First Class, Global Elite.
+
+For "last_session": Analyze ONLY the MOST RECENT workout (Workout 1). For each exercise, look through ALL provided workouts to find previous instances of that same exercise. Calculate progression (weight/reps changes over time). Rate each exercise with a rank based on the user's stats. Give short coaching feedback per exercise (what was good, what to improve). Also give an overall session summary.
+
+For "next_session": Based on recovery analysis of all workouts, suggest what the next training session should focus on and why.
+
+For each macro in nutrition_review, ALWAYS include the actual number and the goal number (e.g. "2100 of 2500 kcal — solid, right on track!").
+
 You MUST respond with valid JSON matching this exact schema:
 {{
   "nutrition_review": {{
-    "calories": "<string, ONE short sentence about calorie intake>",
-    "protein": "<string, ONE short sentence about protein intake>",
-    "carbs": "<string, ONE short sentence about carb intake>",
-    "fat": "<string, ONE short sentence about fat intake>"
+    "calories": "<string, ONE short sentence WITH actual/goal numbers>",
+    "protein": "<string, ONE short sentence WITH actual/goal grams>",
+    "carbs": "<string, ONE short sentence WITH actual/goal grams>",
+    "fat": "<string, ONE short sentence WITH actual/goal grams>"
   }},
-  "workout_suggestion": "<string, 2-3 sentences suggesting today's training focus with reasoning>",
-  "daily_mission": "<string, one motivational sentence or actionable micro-goal for today>"
+  "workout_suggestion": "<string, 2-3 sentences suggesting today's training focus>",
+  "daily_mission": "<string, one motivational sentence>",
+  "last_session": {{
+    "title": "<string, name of the most recent workout>",
+    "date": "<string, date of the workout>",
+    "duration_min": <int or null>,
+    "overall_feedback": "<string, 2-3 sentences: what went well, what to improve>",
+    "exercises": [
+      {{
+        "name": "<string, exercise name>",
+        "muscle_group": "<string>",
+        "best_set": "<string, e.g. '80kg × 8'>",
+        "total_volume_kg": <number, total weight × reps across all sets>,
+        "rank": "<string, one of the CS2 rank tier names>",
+        "rank_index": <int, 0-15 index in the tier list>,
+        "trend": "<string, 'up' | 'down' | 'stable' | 'new'>",
+        "history": [
+          {{
+            "date": "<string, workout date>",
+            "best_set": "<string, e.g. '75kg × 8'>",
+            "volume_kg": <number>
+          }}
+        ],
+        "feedback": "<string, ONE short sentence of coaching advice>"
+      }}
+    ]
+  }},
+  "next_session": {{
+    "title": "<string, suggested workout name/focus>",
+    "reasoning": "<string, 2-3 sentences explaining why these muscle groups>",
+    "focus_muscles": ["<string>", "..."],
+    "suggested_exercises": ["<string>", "..."]
+  }}
 }}
 
 Respond ONLY with the JSON object. No markdown, no explanation."""
@@ -149,7 +206,8 @@ def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -
 
     # ── Workouts ─────────────────────────────────────────
     if hevy_data:
-        parts.append("=== LAST 5 WORKOUTS (Hevy) ===")
+        parts.append(f"=== LAST {len(hevy_data)} WORKOUTS (Hevy) ===")
+        parts.append("(Workout 1 = most recent, use it for last_session analysis)")
         for i, w in enumerate(hevy_data, 1):
             dur = f" ({w['duration_min']} min)" if w.get("duration_min") else ""
             parts.append(f"\nWorkout {i}: {w.get('title', 'Untitled')}{dur} — {w.get('start_time', '?')}")
@@ -198,7 +256,7 @@ async def generate_daily_briefing(
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.7,
-                max_output_tokens=2048,
+                max_output_tokens=8192,
                 response_mime_type="application/json",
             ),
         )
@@ -224,17 +282,28 @@ async def generate_daily_briefing(
         # Ensure nutrition_review is a dict with the expected sub-keys
         nr = parsed.get("nutrition_review")
         if isinstance(nr, str):
-            # AI returned a single string instead of the object — wrap it
             parsed["nutrition_review"] = {
-                "calories": nr,
-                "protein": "",
-                "carbs": "",
-                "fat": "",
+                "calories": nr, "protein": "", "carbs": "", "fat": "",
             }
         elif isinstance(nr, dict):
             for k in ("calories", "protein", "carbs", "fat"):
                 if k not in nr:
                     nr[k] = ""
+
+        # Ensure last_session and next_session exist (may be null)
+        if "last_session" not in parsed:
+            parsed["last_session"] = None
+        if "next_session" not in parsed:
+            parsed["next_session"] = None
+
+        # Validate exercise rank indices
+        ls = parsed.get("last_session")
+        if isinstance(ls, dict):
+            for ex in ls.get("exercises", []):
+                if "rank_index" in ex:
+                    ex["rank_index"] = max(0, min(15, int(ex["rank_index"])))
+                if "history" not in ex:
+                    ex["history"] = []
 
         return parsed
 

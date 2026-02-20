@@ -96,10 +96,45 @@ export interface NutritionReview {
   fat: string;
 }
 
+export interface ExerciseHistory {
+  date: string;
+  best_set: string;
+  volume_kg: number;
+}
+
+export interface ExerciseReview {
+  name: string;
+  muscle_group: string;
+  best_set: string;
+  total_volume_kg: number;
+  rank: string;
+  rank_index: number;
+  trend: 'up' | 'down' | 'stable' | 'new';
+  history: ExerciseHistory[];
+  feedback: string;
+}
+
+export interface LastSession {
+  title: string;
+  date: string;
+  duration_min: number | null;
+  overall_feedback: string;
+  exercises: ExerciseReview[];
+}
+
+export interface NextSession {
+  title: string;
+  reasoning: string;
+  focus_muscles: string[];
+  suggested_exercises: string[];
+}
+
 export interface BriefingData {
   nutrition_review: NutritionReview;
   workout_suggestion: string;
   daily_mission: string;
+  last_session: LastSession | null;
+  next_session: NextSession | null;
 }
 
 export interface Briefing {
