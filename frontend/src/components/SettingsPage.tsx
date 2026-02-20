@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { saveApiKey, saveYazioCredentials } from '../api/api';
+import { saveApiKey, saveYazioCredentials, saveGoal } from '../api/api';
 import type { UserInfo } from '../api/api';
-import { Key, UtensilsCrossed, Eye, EyeOff, CheckCircle, AlertCircle, Shield } from 'lucide-react';
+import { Key, UtensilsCrossed, Eye, EyeOff, CheckCircle, AlertCircle, Shield, Target } from 'lucide-react';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
 
@@ -20,6 +20,12 @@ export default function SettingsPage() {
     const [showYazioPw, setShowYazioPw] = useState(false);
     const [savingYazio, setSavingYazio] = useState(false);
     const [yazioMsg, setYazioMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    // Goal
+    const [goal, setGoal] = useState(user?.current_goal ?? '');
+    const [targetWeight, setTargetWeight] = useState(user?.target_weight?.toString() ?? '');
+    const [savingGoal, setSavingGoal] = useState(false);
+    const [goalMsg, setGoalMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const handleSaveKey = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -43,6 +49,18 @@ export default function SettingsPage() {
             setYazioEmail(''); setYazioPassword('');
         } catch (err: any) { setYazioMsg({ type: 'error', text: err.message }); }
         finally { setSavingYazio(false); }
+    };
+
+    const handleSaveGoal = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setGoalMsg(null); setSavingGoal(true);
+        try {
+            const tw = targetWeight ? parseFloat(targetWeight) : null;
+            await saveGoal(goal, tw);
+            setGoalMsg({ type: 'success', text: 'Goal updated!' });
+            await refreshUser();
+        } catch (err: any) { setGoalMsg({ type: 'error', text: err.message }); }
+        finally { setSavingGoal(false); }
     };
 
     return (
@@ -125,6 +143,35 @@ export default function SettingsPage() {
                         className="btn-gold w-full flex items-center justify-center gap-2">
                         <UtensilsCrossed size={16} />
                         {savingYazio ? 'Saving…' : user?.has_yazio ? 'Update Yazio Login' : 'Save Yazio Login'}
+                    </button>
+                </form>
+            </div>
+
+            {/* Fitness Goal */}
+            <div className="card-glass p-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <Target className="w-5 h-5 text-gold-400" />
+                    <h3 className="text-lg font-semibold text-cream-50">Fitness Goal</h3>
+                    <StatusBadge connected={!!user?.current_goal} />
+                </div>
+                <p className="text-dark-300 text-sm mb-4">
+                    Your AI coach uses this goal to tailor daily briefings and workout suggestions.
+                </p>
+                <form onSubmit={handleSaveGoal} className="space-y-4">
+                    <input type="text" className="input-dark text-sm"
+                        placeholder='e.g. "Lean Bulk", "Cut to 80kg", "Maintain & get stronger"'
+                        value={goal} onChange={e => setGoal(e.target.value)} required />
+                    <div>
+                        <label className="text-xs text-dark-300 mb-1.5 block">Target weight (optional, in kg)</label>
+                        <input type="number" step="0.1" min="30" max="300" className="input-dark text-sm"
+                            placeholder="e.g. 82.5"
+                            value={targetWeight} onChange={e => setTargetWeight(e.target.value)} />
+                    </div>
+                    <Msg msg={goalMsg} />
+                    <button type="submit" disabled={savingGoal}
+                        className="btn-gold w-full flex items-center justify-center gap-2">
+                        <Target size={16} />
+                        {savingGoal ? 'Saving…' : 'Update Goal'}
                     </button>
                 </form>
             </div>

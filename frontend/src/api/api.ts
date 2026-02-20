@@ -61,6 +61,8 @@ export interface UserInfo {
   username: string;
   has_hevy_key: boolean;
   has_yazio: boolean;
+  current_goal: string | null;
+  target_weight: number | null;
 }
 
 export const getMe = () => apiRequest<UserInfo>('/user/me');
@@ -76,3 +78,33 @@ export const saveYazioCredentials = (yazio_email: string, yazio_password: string
     method: 'POST',
     body: JSON.stringify({ yazio_email, yazio_password }),
   });
+
+/* ── Goal endpoints ─────────────────────────────────────── */
+
+export const saveGoal = (current_goal: string, target_weight?: number | null) =>
+  apiRequest<{ message: string; current_goal: string; target_weight: number | null }>('/user/goal', {
+    method: 'POST',
+    body: JSON.stringify({ current_goal, target_weight: target_weight ?? null }),
+  });
+
+/* ── Briefing endpoints ─────────────────────────────────── */
+
+export interface BriefingData {
+  readiness_score: number;
+  nutrition_review: string;
+  workout_suggestion: string;
+  daily_mission: string;
+}
+
+export interface Briefing {
+  id: string;
+  date: string;
+  briefing_data: BriefingData;
+  created_at: string;
+}
+
+export const getTodayBriefing = () =>
+  apiRequest<Briefing>('/api/briefing/today');
+
+export const regenerateBriefing = () =>
+  apiRequest<Briefing>('/api/briefing/regenerate', { method: 'POST' });

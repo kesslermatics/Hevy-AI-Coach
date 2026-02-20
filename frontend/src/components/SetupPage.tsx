@@ -1,16 +1,24 @@
 import { useState } from 'react';
 import { useNavigate, useOutletContext } from 'react-router-dom';
-import { saveApiKey, saveYazioCredentials } from '../api/api';
+import { saveApiKey, saveYazioCredentials, saveGoal } from '../api/api';
 import type { UserInfo } from '../api/api';
-import { Key, UtensilsCrossed, Eye, EyeOff, ArrowRight, Dumbbell, CheckCircle } from 'lucide-react';
+import { Key, UtensilsCrossed, Eye, EyeOff, ArrowRight, Dumbbell, CheckCircle, Target } from 'lucide-react';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
+
+type Step = 'hevy' | 'yazio' | 'goal';
+
+function getInitialStep(user: UserInfo | null): Step {
+    if (!user?.has_hevy_key) return 'hevy';
+    if (!user?.has_yazio) return 'yazio';
+    return 'goal';
+}
 
 export default function SetupPage() {
     const navigate = useNavigate();
     const { user, refreshUser } = useOutletContext<LayoutContext>();
 
-    const [step, setStep] = useState<'hevy' | 'yazio'>(user?.has_hevy_key ? 'yazio' : 'hevy');
+    const [step, setStep] = useState<Step>(getInitialStep(user));
 
     // Hevy
     const [apiKey, setApiKey] = useState('');
@@ -23,6 +31,12 @@ export default function SetupPage() {
     const [showYazioPw, setShowYazioPw] = useState(false);
     const [savingYazio, setSavingYazio] = useState(false);
     const [yazioMsg, setYazioMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+    // Goal
+    const [goal, setGoal] = useState('');
+    const [targetWeight, setTargetWeight] = useState('');
+    const [savingGoal, setSavingGoal] = useState(false);
+    const [goalMsg, setGoalMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
     const handleSaveHevy = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -42,12 +56,25 @@ export default function SetupPage() {
         setYazioMsg(null); setSavingYazio(true);
         try {
             await saveYazioCredentials(yazioEmail, yazioPassword);
-            setYazioMsg({ type: 'success', text: 'Yazio connected! Redirecting…' });
+            setYazioMsg({ type: 'success', text: 'Yazio connected!' });
             await refreshUser();
             setYazioEmail(''); setYazioPassword('');
-            setTimeout(() => navigate('/dashboard'), 1000);
+            setTimeout(() => setStep('goal'), 800);
         } catch (err: any) { setYazioMsg({ type: 'error', text: err.message }); }
         finally { setSavingYazio(false); }
+    };
+
+    const handleSaveGoal = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setGoalMsg(null); setSavingGoal(true);
+        try {
+            const tw = targetWeight ? parseFloat(targetWeight) : null;
+            await saveGoal(goal, tw);
+            setGoalMsg({ type: 'success', text: 'Goal saved! Let\'s go 💪' });
+            await refreshUser();
+            setTimeout(() => navigate('/dashboard'), 800);
+        } catch (err: any) { setGoalMsg({ type: 'error', text: err.message }); }
+        finally { setSavingGoal(false); }
     };
 
     return (
@@ -64,8 +91,10 @@ export default function SetupPage() {
             {/* Step indicator */}
             <div className="flex items-center justify-center gap-3 mb-2">
                 <StepDot active={step === 'hevy'} done={!!user?.has_hevy_key} label="1" />
-                <div className="w-10 h-px bg-dark-400" />
+                <div className="w-8 h-px bg-dark-400" />
                 <StepDot active={step === 'yazio'} done={!!user?.has_yazio} label="2" />
+                <div className="w-8 h-px bg-dark-400" />
+                <StepDot active={step === 'goal'} done={!!user?.current_goal} label="3" />
             </div>
 
             {/* ── Step 1: Hevy ─────────────────────────── */}
@@ -135,6 +164,42 @@ export default function SetupPage() {
                     <button onClick={() => setStep('hevy')}
                         className="w-full text-center text-sm text-dark-300 hover:text-cream-100 transition-colors cursor-pointer">
                         ← Back to Hevy
+                    </button>
+                </div>
+            )}
+
+            {/* ── Step 3: Goal ─────────────────────────── */}
+            {step === 'goal' && (
+                <div className="card-glass p-6 space-y-4">
+                    <div className="flex items-center gap-3">
+                        <Target className="w-5 h-5 text-gold-400" />
+                        <h3 className="text-lg font-semibold text-cream-50">Your Fitness Goal</h3>
+                    </div>
+                    <p className="text-dark-300 text-sm">
+                        Describe your goal in your own words. The AI coach will use this to tailor
+                        your daily briefing and workout suggestions.
+                    </p>
+                    <form onSubmit={handleSaveGoal} className="space-y-4">
+                        <input type="text" className="input-dark text-sm"
+                            placeholder='e.g. "Lean Bulk", "Cut to 80kg", "Maintain & get stronger"'
+                            value={goal}
+                            onChange={e => setGoal(e.target.value)} required />
+                        <div>
+                            <label className="text-xs text-dark-300 mb-1.5 block">Target weight (optional, in kg)</label>
+                            <input type="number" step="0.1" min="30" max="300" className="input-dark text-sm"
+                                placeholder="e.g. 82.5"
+                                value={targetWeight}
+                                onChange={e => setTargetWeight(e.target.value)} />
+                        </div>
+                        <Msg msg={goalMsg} />
+                        <button type="submit" disabled={savingGoal}
+                            className="btn-gold w-full flex items-center justify-center gap-2">
+                            {savingGoal ? 'Saving…' : <><span>Save & Start Coaching</span><ArrowRight size={16} /></>}
+                        </button>
+                    </form>
+                    <button onClick={() => setStep('yazio')}
+                        className="w-full text-center text-sm text-dark-300 hover:text-cream-100 transition-colors cursor-pointer">
+                        ← Back to Yazio
                     </button>
                 </div>
             )}

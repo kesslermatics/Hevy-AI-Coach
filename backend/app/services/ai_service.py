@@ -148,7 +148,7 @@ async def generate_daily_briefing(
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.7,
-                max_output_tokens=600,
+                max_output_tokens=2048,
                 response_mime_type="application/json",
             ),
         )
@@ -177,7 +177,7 @@ async def generate_daily_briefing(
         return parsed
 
     except json.JSONDecodeError as exc:
-        logger.error("Failed to parse Gemini JSON response: %s — raw: %s", exc, raw_content[:300])
+        logger.error("Failed to parse Gemini JSON response: %s — raw: %s", exc, raw_content[:500])
         return FALLBACK_BRIEFING
     except Exception as exc:
         logger.error("Gemini API error: %s", exc)

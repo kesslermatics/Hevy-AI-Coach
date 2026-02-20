@@ -20,8 +20,8 @@ export default function AppLayout() {
         if (!isAuthenticated()) { navigate('/login'); return; }
         refreshUser()
             .then(u => {
-                // If credentials are missing and not already on setup page → redirect
-                const needsSetup = !u.has_hevy_key || !u.has_yazio;
+                // If credentials or goal are missing and not already on setup page → redirect
+                const needsSetup = !u.has_hevy_key || !u.has_yazio || !u.current_goal;
                 if (needsSetup && location.pathname !== '/setup') {
                     navigate('/setup');
                 }
