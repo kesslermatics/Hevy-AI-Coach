@@ -166,8 +166,11 @@ export const getSessionReview = () =>
 
 export interface WeatherData {
   temperature_c: number | null;
+  temp_min_c: number | null;
+  temp_max_c: number | null;
   windspeed_kmh: number | null;
   condition: string;
+  daily_condition: string;
   emoji: string;
   is_day: boolean;
 }

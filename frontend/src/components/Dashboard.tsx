@@ -173,7 +173,7 @@ export default function Dashboard() {
                         {weather && weather.temperature_c != null && (
                             <p className="text-dark-300 text-sm flex items-center gap-1.5">
                                 <MapPin size={12} />
-                                <span>{weather.emoji} {Math.round(weather.temperature_c)}°C · {weather.condition}</span>
+                                <span>{weather.emoji} {Math.round(weather.temperature_c)}°C · {weather.condition}{weather.temp_min_c != null && weather.temp_max_c != null && ` · ↓${Math.round(weather.temp_min_c)}° ↑${Math.round(weather.temp_max_c)}°`}</span>
                             </p>
                         )}
                     </div>

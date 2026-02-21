@@ -37,8 +37,8 @@ WMO_EMOJI = {
 
 async def fetch_weather(lat: float, lon: float) -> Optional[dict]:
     """
-    Fetch current weather from Open-Meteo.
-    Returns a simple dict with temp, condition, emoji, etc.
+    Fetch current weather + today's forecast from Open-Meteo.
+    Returns dict with current temp, min/max, condition, emoji, wind, etc.
     """
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -48,6 +48,8 @@ async def fetch_weather(lat: float, lon: float) -> Optional[dict]:
                     "latitude": lat,
                     "longitude": lon,
                     "current_weather": "true",
+                    "daily": "temperature_2m_max,temperature_2m_min,weathercode",
+                    "forecast_days": 1,
                     "timezone": "auto",
                 },
             )
@@ -57,12 +59,21 @@ async def fetch_weather(lat: float, lon: float) -> Optional[dict]:
 
             data = resp.json()
             cw = data.get("current_weather", {})
+            daily = data.get("daily", {})
             code = cw.get("weathercode", 0)
+
+            # Today's min/max from daily forecast
+            temp_max = daily.get("temperature_2m_max", [None])[0]
+            temp_min = daily.get("temperature_2m_min", [None])[0]
+            daily_code = daily.get("weathercode", [None])[0]
 
             return {
                 "temperature_c": cw.get("temperature"),
+                "temp_min_c": temp_min,
+                "temp_max_c": temp_max,
                 "windspeed_kmh": cw.get("windspeed"),
                 "condition": WMO_CODES.get(code, "Unknown"),
+                "daily_condition": WMO_CODES.get(daily_code, "") if daily_code is not None else "",
                 "emoji": WMO_EMOJI.get(code, "🌡️"),
                 "is_day": cw.get("is_day", 1) == 1,
             }

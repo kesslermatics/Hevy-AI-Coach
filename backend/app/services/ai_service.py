@@ -127,7 +127,7 @@ For each macro in nutrition_review, ALWAYS include the actual number and the goa
 - "Drink a protein shake within 30 min after training."
 The mission should relate to either today's workout or yesterday's nutrition gaps.
 
-**weather_note**: If weather data is provided, write ONE short sentence connecting the weather to the workout day. E.g. "22°C and sunny — perfect for a run after your session!" or "Rainy and 5°C — cozy gym day, no excuses!" or "34°C outside — stay hydrated, bring extra water to the gym." If no weather data, leave this as an empty string.
+**weather_note**: If weather data is provided, write 1-2 full sentences describing today's weather naturally. Include the current temperature, the expected low and high for the day, and the conditions. Then optionally connect it to the workout. Example: "Right now it's 5°C with light rain — expect lows of 2°C and highs of 8°C today. Perfect excuse to hit the gym instead of running outside!" If no weather data, leave this as an empty string.
 
 You MUST respond with valid JSON matching this exact schema:
 {{
@@ -140,7 +140,7 @@ You MUST respond with valid JSON matching this exact schema:
   "workout_suggestion": "<string, 2-3 sentences suggesting today's training focus>",
   "weight_trend": "<string, 2-3 sentences about weight progress with actual numbers>",
   "daily_mission": "<string, ONE specific actionable micro-task for today>",
-  "weather_note": "<string, ONE short weather-related sentence, or empty string if no weather data>"
+  "weather_note": "<string, 1-2 sentences with current temp, daily low/high, conditions, and optional workout connection — or empty string if no weather data>"
 }}
 
 Respond ONLY with the JSON object. No markdown, no explanation."""
@@ -238,8 +238,11 @@ async def generate_daily_briefing(
     if weather_data:
         user_message += (
             f"\n\n=== CURRENT WEATHER ===\n"
-            f"Temperature: {weather_data.get('temperature_c', '?')}°C\n"
-            f"Condition: {weather_data.get('condition', 'Unknown')}\n"
+            f"Current Temperature: {weather_data.get('temperature_c', '?')}°C\n"
+            f"Today's Low: {weather_data.get('temp_min_c', '?')}°C\n"
+            f"Today's High: {weather_data.get('temp_max_c', '?')}°C\n"
+            f"Current Condition: {weather_data.get('condition', 'Unknown')}\n"
+            f"Daily Condition: {weather_data.get('daily_condition', weather_data.get('condition', 'Unknown'))}\n"
             f"Wind: {weather_data.get('windspeed_kmh', '?')} km/h\n"
         )
 
