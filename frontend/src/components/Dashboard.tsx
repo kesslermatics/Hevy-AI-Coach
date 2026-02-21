@@ -5,7 +5,8 @@ import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutList
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
-    Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus, Scale, MapPin, Activity
+    Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus, Scale, MapPin, Activity,
+    Zap, ChevronRight, Award
 } from 'lucide-react';
 import MuscleHeatmap from './MuscleHeatmap';
 import ActivityHeatmap from './ActivityHeatmap';
@@ -19,18 +20,6 @@ const RANK_COLORS: Record<number, string> = {
     8: '#3B82F6', 9: '#3B82F6', 10: '#3B82F6',
     11: '#8B5CF6', 12: '#A855F7', 13: '#A855F7',
     14: '#EF4444', 15: '#FFD700',
-};
-
-const RANK_BG: Record<number, string> = {
-    0: 'bg-gray-500/10 border-gray-500/30', 1: 'bg-gray-500/10 border-gray-500/30',
-    2: 'bg-gray-500/10 border-gray-500/30', 3: 'bg-gray-500/10 border-gray-500/30',
-    4: 'bg-yellow-600/10 border-yellow-600/30', 5: 'bg-yellow-600/10 border-yellow-600/30',
-    6: 'bg-yellow-600/10 border-yellow-600/30', 7: 'bg-yellow-600/10 border-yellow-600/30',
-    8: 'bg-blue-500/10 border-blue-500/30', 9: 'bg-blue-500/10 border-blue-500/30',
-    10: 'bg-blue-500/10 border-blue-500/30',
-    11: 'bg-purple-500/10 border-purple-500/30', 12: 'bg-purple-500/10 border-purple-500/30',
-    13: 'bg-purple-500/10 border-purple-500/30',
-    14: 'bg-red-500/10 border-red-500/30', 15: 'bg-yellow-400/10 border-yellow-400/30',
 };
 
 export default function Dashboard() {
@@ -470,11 +459,20 @@ function LastSessionContent({ session }: { session: SessionReviewData['last_sess
         return <p className="text-dark-300 text-sm text-center py-8">No recent session data available.</p>;
     }
 
+    const prCount = session.exercises.filter(e => e.is_pr).length;
+
     return (
         <div className="space-y-4">
             {/* Session header */}
             <div>
-                <h3 className="text-lg font-semibold text-cream-50">{session.title}</h3>
+                <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-semibold text-cream-50">{session.title}</h3>
+                    {prCount > 0 && (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 text-amber-300 animate-pulse">
+                            🔥 {prCount} PR{prCount > 1 ? 's' : ''}!
+                        </span>
+                    )}
+                </div>
                 <p className="text-xs text-dark-300 mt-0.5">
                     {session.date}{session.duration_min ? ` • ${session.duration_min} min` : ''}
                 </p>
@@ -491,11 +489,11 @@ function LastSessionContent({ session }: { session: SessionReviewData['last_sess
     );
 }
 
-/* ── Exercise Card with Rank + SVG Chart ────────────── */
+/* ── Exercise Card — Full Redesign ──────────────────── */
 
 function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
     const rankColor = RANK_COLORS[exercise.rank_index] ?? '#8C8C8C';
-    const rankBg = RANK_BG[exercise.rank_index] ?? 'bg-gray-500/10 border-gray-500/30';
+    const nextRankColor = RANK_COLORS[Math.min(exercise.rank_index + 1, 15)] ?? '#D4A017';
 
     const TrendIcon = exercise.trend === 'up' ? TrendingUp
         : exercise.trend === 'down' ? TrendingDown
@@ -505,102 +503,257 @@ function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
         : exercise.trend === 'down' ? 'text-red-400'
             : exercise.trend === 'new' ? 'text-blue-400' : 'text-dark-300';
 
+    const trendLabel = exercise.trend === 'up' ? 'Improving'
+        : exercise.trend === 'down' ? 'Declined'
+            : exercise.trend === 'new' ? 'First time' : 'Stable';
+
+    // Calculate rank progress within current tier (0-100%)
+    const rankProgress = ((exercise.rank_index + 1) / 16) * 100;
+
     return (
-        <div className="bg-dark-700/40 backdrop-blur-sm rounded-xl border border-dark-500/30 p-4 space-y-3">
+        <div className={`relative bg-dark-700/40 backdrop-blur-sm rounded-xl border ${exercise.is_pr ? 'border-amber-500/40 shadow-lg shadow-amber-500/5' : 'border-dark-500/30'} p-4 space-y-3 overflow-hidden`}>
+
+            {/* PR Badge — top right glow */}
+            {exercise.is_pr && (
+                <div className="absolute top-0 right-0">
+                    <div className="bg-gradient-to-bl from-amber-500/20 via-orange-500/10 to-transparent w-24 h-24" />
+                    <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-amber-500/25 to-orange-500/25 border border-amber-500/40">
+                        <Zap size={10} className="text-amber-300" />
+                        <span className="text-[9px] font-bold text-amber-300 uppercase tracking-wider">
+                            {exercise.pr_type === 'both' ? '1RM + Vol PR' : exercise.pr_type === '1rm' ? '1RM PR' : 'Volume PR'}
+                        </span>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between pr-20">
                 <div className="flex items-center gap-2 min-w-0">
                     <Dumbbell size={14} className="text-dark-300 shrink-0" />
                     <span className="text-sm font-medium text-cream-50 truncate">{exercise.name}</span>
-                    <span className="text-[10px] text-dark-400 shrink-0 uppercase">{exercise.muscle_group}</span>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    <TrendIcon size={14} className={trendColor} />
-                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${rankBg}`}
-                        style={{ color: rankColor }}>
-                        {exercise.rank}
-                    </span>
+                <div className={`flex items-center gap-1.5 ${trendColor}`}>
+                    <TrendIcon size={12} />
+                    <span className="text-[10px] font-medium">{trendLabel}</span>
                 </div>
             </div>
 
-            {/* Stats */}
-            <div className="flex items-center gap-4 text-xs text-dark-300">
-                <span>Best: <span className="text-cream-100 font-medium">{exercise.best_set}</span></span>
-                <span>Volume: <span className="text-cream-100 font-medium">{Math.round(exercise.total_volume_kg)} kg</span></span>
+            {/* Stats row */}
+            <div className="flex items-center gap-3 text-xs">
+                <div className="flex items-center gap-1.5 bg-dark-600/40 rounded-lg px-2.5 py-1.5 border border-dark-500/20">
+                    <span className="text-dark-400">Best</span>
+                    <span className="text-cream-100 font-semibold">{exercise.best_set}</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-dark-600/40 rounded-lg px-2.5 py-1.5 border border-dark-500/20">
+                    <span className="text-dark-400">e1RM</span>
+                    <span className="text-cream-100 font-semibold">{Math.round(exercise.estimated_1rm)}kg</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-dark-600/40 rounded-lg px-2.5 py-1.5 border border-dark-500/20">
+                    <span className="text-dark-400">Vol</span>
+                    <span className="text-cream-100 font-semibold">{Math.round(exercise.total_volume_kg)}kg</span>
+                </div>
             </div>
 
-            {/* Rank progress bar */}
-            <div className="w-full h-1.5 rounded-full bg-dark-600 overflow-hidden">
-                <div className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${((exercise.rank_index + 1) / 16) * 100}%`, backgroundColor: rankColor }} />
+            {/* Rank section */}
+            <div className="bg-dark-600/30 rounded-lg p-3 space-y-2">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <Award size={14} style={{ color: rankColor }} />
+                        <span className="text-xs font-bold" style={{ color: rankColor }}>{exercise.rank}</span>
+                        {exercise.rank_percentile && (
+                            <span className="text-[10px] text-dark-300 bg-dark-500/40 px-1.5 py-0.5 rounded">
+                                {exercise.rank_percentile}
+                            </span>
+                        )}
+                    </div>
+                    <span className="text-[10px] text-dark-400 uppercase">{exercise.muscle_group}</span>
+                </div>
+
+                {/* Progress bar to next rank */}
+                <div className="space-y-1">
+                    <div className="w-full h-2 rounded-full bg-dark-700 overflow-hidden">
+                        <div
+                            className="h-full rounded-full transition-all duration-1000 ease-out"
+                            style={{
+                                width: `${rankProgress}%`,
+                                background: `linear-gradient(90deg, ${rankColor}, ${nextRankColor})`,
+                            }}
+                        />
+                    </div>
+                    {exercise.rank_next && exercise.rank_next !== 'MAX' && (
+                        <div className="flex items-center justify-between text-[10px]">
+                            <span className="text-dark-400 flex items-center gap-1">
+                                <ChevronRight size={10} />
+                                Next: <span style={{ color: nextRankColor }} className="font-medium">{exercise.rank_next}</span>
+                            </span>
+                            {exercise.rank_next_target && (
+                                <span className="text-dark-300">Target: <span className="text-cream-200 font-medium">{exercise.rank_next_target}</span></span>
+                            )}
+                        </div>
+                    )}
+                    {exercise.rank_next === 'MAX' && (
+                        <p className="text-[10px] text-gold-400 font-medium text-center">🏆 Maximum rank achieved!</p>
+                    )}
+                </div>
             </div>
 
             {/* Feedback */}
             <p className="text-cream-200 text-xs leading-relaxed">{exercise.feedback}</p>
 
-            {/* Progression Chart (SVG) */}
+            {/* Next Target */}
+            {exercise.next_target && (
+                <div className="flex items-start gap-2 bg-blue-500/8 border border-blue-500/20 rounded-lg p-2.5">
+                    <Target size={12} className="text-blue-400 shrink-0 mt-0.5" />
+                    <div>
+                        <p className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider mb-0.5">Next Target</p>
+                        <p className="text-blue-200 text-xs font-medium">{exercise.next_target}</p>
+                    </div>
+                </div>
+            )}
+
+            {/* e1RM Progression Chart */}
             {exercise.history.length > 0 && (
-                <ProgressionChart history={exercise.history} currentVolume={exercise.total_volume_kg} />
+                <E1rmChart history={exercise.history} currentE1rm={exercise.estimated_1rm} isPr={exercise.is_pr} />
             )}
         </div>
     );
 }
 
-/* ── SVG Progression Chart ──────────────────────────── */
+/* ── Estimated 1RM Progression Chart (Modern) ───────── */
 
-function ProgressionChart({ history, currentVolume }: {
-    history: { date: string; best_set: string; volume_kg: number }[];
-    currentVolume: number;
+function E1rmChart({ history, currentE1rm, isPr }: {
+    history: { date: string; best_set: string; e1rm: number; volume_kg: number }[];
+    currentE1rm: number;
+    isPr: boolean;
 }) {
-    const allPoints = [...history.map(h => h.volume_kg), currentVolume];
-    const maxVol = Math.max(...allPoints, 1);
-    const minVol = Math.min(...allPoints);
-    const range = maxVol - minVol || 1;
+    const allE1rm = [...history.map(h => h.e1rm), currentE1rm];
+    const maxE1rm = Math.max(...allE1rm, 1);
+    const minE1rm = Math.min(...allE1rm);
+    const range = maxE1rm - minE1rm || 1;
 
-    const W = 280;
-    const H = 80;
-    const padX = 8;
-    const padY = 8;
+    const W = 300;
+    const H = 100;
+    const padX = 12;
+    const padY = 16;
+    const padBottom = 24;
     const chartW = W - padX * 2;
-    const chartH = H - padY * 2;
+    const chartH = H - padY - padBottom;
 
-    const points = allPoints.map((v, i) => ({
-        x: padX + (i / (allPoints.length - 1 || 1)) * chartW,
-        y: padY + chartH - ((v - minVol) / range) * chartH,
+    const points = allE1rm.map((v, i) => ({
+        x: padX + (i / (allE1rm.length - 1 || 1)) * chartW,
+        y: padY + chartH - ((v - minE1rm) / range) * chartH,
+        value: v,
     }));
 
-    // Build SVG path
-    const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
-    const areaPath = `${linePath} L ${points[points.length - 1].x} ${H - padY} L ${points[0].x} ${H - padY} Z`;
+    // Smooth curve using cubic bezier
+    const buildSmoothPath = (pts: typeof points) => {
+        if (pts.length < 2) return `M ${pts[0].x} ${pts[0].y}`;
+        let path = `M ${pts[0].x} ${pts[0].y}`;
+        for (let i = 0; i < pts.length - 1; i++) {
+            const cp1x = pts[i].x + (pts[i + 1].x - pts[i].x) * 0.4;
+            const cp1y = pts[i].y;
+            const cp2x = pts[i + 1].x - (pts[i + 1].x - pts[i].x) * 0.4;
+            const cp2y = pts[i + 1].y;
+            path += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${pts[i + 1].x} ${pts[i + 1].y}`;
+        }
+        return path;
+    };
+
+    const curvePath = buildSmoothPath(points);
+    const areaPath = `${curvePath} L ${points[points.length - 1].x} ${H - padBottom} L ${points[0].x} ${H - padBottom} Z`;
+
+    // Date labels
+    const allDates = [...history.map(h => h.date), 'Now'];
+    const gradientId = `e1rm-grad-${history[0]?.date || 'x'}`;
+    const lineColor = isPr ? '#F59E0B' : '#818CF8';
+    const lineColorFaded = isPr ? 'rgba(245, 158, 11, 0.15)' : 'rgba(129, 140, 248, 0.15)';
 
     return (
-        <div className="mt-1">
-            <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-1.5">Volume Progression</p>
-            <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" preserveAspectRatio="none">
-                <defs>
-                    <linearGradient id={`grad-${history[0]?.date}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#A855F7" stopOpacity="0.3" />
-                        <stop offset="100%" stopColor="#A855F7" stopOpacity="0" />
-                    </linearGradient>
-                </defs>
-                {/* Area fill */}
-                <path d={areaPath} fill={`url(#grad-${history[0]?.date})`} />
-                {/* Line */}
-                <path d={linePath} fill="none" stroke="#A855F7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                {/* Data dots */}
-                {points.map((p, i) => (
-                    <circle key={i} cx={p.x} cy={p.y} r={i === points.length - 1 ? 4 : 2.5}
-                        fill={i === points.length - 1 ? '#F59E0B' : '#A855F7'}
-                        stroke={i === points.length - 1 ? '#F59E0B' : 'none'} strokeWidth="1" />
-                ))}
-            </svg>
-            {/* Labels */}
-            <div className="flex justify-between text-[9px] text-dark-400 mt-0.5 px-1">
-                {allPoints.map((v, i) => (
-                    <span key={i} className={i === allPoints.length - 1 ? 'text-gold-400 font-bold' : ''}>
-                        {Math.round(v)}kg
+        <div className="mt-1 space-y-1">
+            <div className="flex items-center justify-between">
+                <p className="text-[10px] text-dark-400 uppercase tracking-wider flex items-center gap-1">
+                    <TrendingUp size={10} />Estimated 1RM Progression
+                </p>
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-dark-400">
+                        {Math.round(allE1rm[0])}kg
                     </span>
-                ))}
+                    <span className="text-[9px] text-dark-400">→</span>
+                    <span className={`text-[9px] font-bold ${isPr ? 'text-amber-400' : 'text-indigo-300'}`}>
+                        {Math.round(currentE1rm)}kg
+                    </span>
+                    {currentE1rm > allE1rm[0] && (
+                        <span className="text-[9px] text-green-400 font-medium">
+                            +{Math.round(currentE1rm - allE1rm[0])}
+                        </span>
+                    )}
+                </div>
+            </div>
+            <div className="bg-dark-600/20 rounded-lg p-2 border border-dark-500/15">
+                <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto" style={{ height: 90 }}>
+                    <defs>
+                        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor={lineColor} stopOpacity="0.25" />
+                            <stop offset="100%" stopColor={lineColor} stopOpacity="0" />
+                        </linearGradient>
+                    </defs>
+
+                    {/* Horizontal guide lines */}
+                    {[0, 0.5, 1].map((frac, i) => {
+                        const y = padY + chartH - frac * chartH;
+                        const val = minE1rm + frac * range;
+                        return (
+                            <g key={i}>
+                                <line x1={padX} y1={y} x2={W - padX} y2={y}
+                                    stroke="rgba(255,255,255,0.04)" strokeWidth="1" strokeDasharray="4 4" />
+                                <text x={W - padX + 4} y={y + 3} fill="#444" fontSize="7" fontFamily="monospace">
+                                    {Math.round(val)}
+                                </text>
+                            </g>
+                        );
+                    })}
+
+                    {/* Area fill */}
+                    <path d={areaPath} fill={`url(#${gradientId})`} />
+
+                    {/* Line */}
+                    <path d={curvePath} fill="none" stroke={lineColor} strokeWidth="2.5"
+                        strokeLinecap="round" strokeLinejoin="round" />
+
+                    {/* Data dots */}
+                    {points.map((p, i) => {
+                        const isLast = i === points.length - 1;
+                        return (
+                            <g key={i}>
+                                {isLast && (
+                                    <circle cx={p.x} cy={p.y} r={8} fill={lineColorFaded} />
+                                )}
+                                <circle cx={p.x} cy={p.y} r={isLast ? 4.5 : 3}
+                                    fill={isLast ? lineColor : 'rgba(129, 140, 248, 0.6)'}
+                                    stroke={isLast ? '#fff' : 'none'} strokeWidth={isLast ? 1.5 : 0} />
+                                {/* Value label for first and last */}
+                                {(i === 0 || isLast) && (
+                                    <text
+                                        x={p.x} y={p.y - 10}
+                                        fill={isLast ? lineColor : '#666'}
+                                        fontSize="8" fontWeight={isLast ? 'bold' : 'normal'}
+                                        textAnchor="middle" fontFamily="monospace"
+                                    >
+                                        {Math.round(p.value)}kg
+                                    </text>
+                                )}
+                            </g>
+                        );
+                    })}
+
+                    {/* Date labels at bottom */}
+                    {points.map((p, i) => (
+                        <text key={`d-${i}`} x={p.x} y={H - 6} fill="#444" fontSize="7"
+                            textAnchor="middle" fontFamily="monospace">
+                            {allDates[i] === 'Now' ? 'Now' : allDates[i]?.slice(5)}
+                        </text>
+                    ))}
+                </svg>
             </div>
         </div>
     );

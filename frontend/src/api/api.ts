@@ -99,6 +99,7 @@ export interface NutritionReview {
 export interface ExerciseHistory {
   date: string;
   best_set: string;
+  e1rm: number;
   volume_kg: number;
 }
 
@@ -107,11 +108,18 @@ export interface ExerciseReview {
   muscle_group: string;
   best_set: string;
   total_volume_kg: number;
+  estimated_1rm: number;
   rank: string;
   rank_index: number;
+  rank_percentile: string;
+  rank_next: string;
+  rank_next_target: string;
   trend: 'up' | 'down' | 'stable' | 'new';
+  is_pr: boolean;
+  pr_type: '1rm' | 'volume' | 'both' | 'none';
   history: ExerciseHistory[];
   feedback: string;
+  next_target: string;
 }
 
 export interface LastSession {

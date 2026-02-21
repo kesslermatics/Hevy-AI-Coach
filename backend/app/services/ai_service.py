@@ -355,9 +355,17 @@ def _build_session_review_prompt(profile: Optional[dict]) -> str:
 === USER PROFILE ===
 {user_context}
 
-You will receive the user's last 20 completed workouts from Hevy (exercises, sets, weights).
+You will receive:
+1. The user's last 20 completed workouts from Hevy (exercises, sets, weights).
+2. Yesterday's nutrition data from Yazio (may be missing).
 
-RANK SYSTEM for exercise ratings:
+=== ESTIMATED 1RM ===
+For every exercise, calculate the Estimated 1 Rep Max using the Epley formula:
+  e1rm = weight × (1 + reps / 30)
+Use the BEST set (highest e1rm) from each session. This is the primary progression metric — NOT volume.
+Volume (sets × reps × weight) can be misleading when rep ranges change.
+
+=== RANK SYSTEM ===
 Rank users per exercise based on their performance relative to their age, sex, height, and weight.
 Use this CS2-style tier list (index 0-15, from lowest to highest):
 0: Silver I, 1: Silver II, 2: Silver III, 3: Silver IV,
@@ -366,17 +374,42 @@ Use this CS2-style tier list (index 0-15, from lowest to highest):
 11: Distinguished Master Guardian, 12: Legendary Eagle, 13: Legendary Eagle Master,
 14: Supreme Master First Class, 15: Global Elite.
 
+For each rank, also provide:
+- **rank_percentile**: Estimated top percentage for someone of this age/sex/bodyweight (e.g. "Top 35%").
+- **rank_next**: The name of the next rank above current.
+- **rank_next_target**: A concrete target (e.g. "15kg × 8" or "e1rm 85kg") the user needs to hit to reach the next rank.
+
+=== PR DETECTION ===
+For each exercise, check if the current session set a new record compared to ALL history:
+- **is_pr**: true if this session has the highest e1rm or highest volume ever.
+- **pr_type**: What kind of PR — "1rm" (new e1rm record), "volume" (new total volume record), "both", or "none".
+
+=== FEEDBACK WITH CAUSALITY ===
+Your feedback MUST explain WHY performance changed, not just observe it.
+- If performance dropped and nutrition data shows a caloric deficit or low carbs: connect them. E.g. "Weight dropped to 50kg — expected since you were 265g under your carb goal yesterday. Glycogen stores were depleted. Eat your carbs today and you'll hit 55kg again next week!"
+- If performance improved and nutrition was on point: praise it. E.g. "Up to 60kg from 55kg! Your 180g protein and calorie surplus are paying off."
+- If no nutrition data: just analyze the training data.
+- Always be specific with numbers.
+
+=== NEXT TARGET ===
+For EVERY exercise, generate a concrete **next_target**: what the user should aim for in their next session for this exercise.
+- E.g. "17.5kg × 6-8 reps" or "Stay at 50kg, aim for 4×12 before increasing" or "Deload to 40kg × 10 for recovery".
+- Factor in their goal (strength: lower reps + heavier, hypertrophy: 8-12 range, endurance: 15+).
+- Factor in nutrition state (deficit → conservative targets, surplus → push harder).
+
 Your tasks:
 
 1. **last_session**: Analyze the MOST RECENT workout (Workout 1).
    - For each exercise, search ALL 20 workouts for previous instances.
-   - Build a "history" array showing past performances (date, best set, volume).
-   - Calculate trend: "up" if improving, "down" if declining, "stable" if similar, "new" if first time.
-   - Assign a CS2 rank based on the user's stats (age, sex, height, weight).
-   - Give ONE short sentence of coaching feedback per exercise.
+   - Build a "history" array with: date, best_set (string), e1rm (estimated 1RM from best set), volume_kg.
+   - Calculate trend: "up" if e1rm improving, "down" if declining, "stable" if similar, "new" if first time.
+   - Assign a CS2 rank with percentile and next-rank info.
+   - Detect PRs.
+   - Give coaching feedback WITH causality (connect to nutrition).
+   - Generate a next_target.
    - Give an overall session summary (2-3 sentences).
 
-2. **next_session**: Based on recovery analysis of all workouts, suggest what the next session should focus on and why.
+2. **next_session**: Based on recovery analysis, suggest what the next session should focus on and why.
 
 Keep feedback supportive, short, and actionable.
 
@@ -386,20 +419,27 @@ You MUST respond with valid JSON matching this exact schema:
     "title": "<string, name of the most recent workout>",
     "date": "<string, date of the workout>",
     "duration_min": <int or null>,
-    "overall_feedback": "<string, 2-3 sentences>",
+    "overall_feedback": "<string, 2-3 sentences, mention key PRs if any>",
     "exercises": [
       {{
         "name": "<string>",
         "muscle_group": "<string>",
         "best_set": "<string, e.g. '80kg × 8'>",
         "total_volume_kg": <number>,
+        "estimated_1rm": <number, calculated via Epley from best set>,
         "rank": "<string, CS2 rank name>",
         "rank_index": <int, 0-15>,
+        "rank_percentile": "<string, e.g. 'Top 40%'>",
+        "rank_next": "<string, next rank name or 'MAX' if Global Elite>",
+        "rank_next_target": "<string, what they need to hit for next rank, e.g. '20kg × 8'>",
         "trend": "<'up' | 'down' | 'stable' | 'new'>",
+        "is_pr": <boolean>,
+        "pr_type": "<'1rm' | 'volume' | 'both' | 'none'>",
         "history": [
-          {{ "date": "<string>", "best_set": "<string>", "volume_kg": <number> }}
+          {{ "date": "<string>", "best_set": "<string>", "e1rm": <number>, "volume_kg": <number> }}
         ],
-        "feedback": "<string, ONE short sentence>"
+        "feedback": "<string, 1-2 sentences with causality — WHY did performance change?>",
+        "next_target": "<string, concrete target for next session>"
       }}
     ]
   }},
@@ -426,7 +466,7 @@ async def generate_session_review(
 
     profile = yazio_data.get("profile") if yazio_data else None
     system_prompt = _build_session_review_prompt(profile)
-    user_message = _build_user_message(None, hevy_data)  # Only workouts needed
+    user_message = _build_user_message(yazio_data, hevy_data)  # Include nutrition for causality
 
     try:
         response = await client.aio.models.generate_content(
@@ -458,6 +498,21 @@ async def generate_session_review(
                     ex["rank_index"] = max(0, min(15, int(ex["rank_index"])))
                 if "history" not in ex:
                     ex["history"] = []
+                # Ensure new fields have defaults
+                if "estimated_1rm" not in ex:
+                    ex["estimated_1rm"] = 0
+                if "rank_percentile" not in ex:
+                    ex["rank_percentile"] = ""
+                if "rank_next" not in ex:
+                    ex["rank_next"] = ""
+                if "rank_next_target" not in ex:
+                    ex["rank_next_target"] = ""
+                if "is_pr" not in ex:
+                    ex["is_pr"] = False
+                if "pr_type" not in ex:
+                    ex["pr_type"] = "none"
+                if "next_target" not in ex:
+                    ex["next_target"] = ""
         else:
             parsed["last_session"] = None
 
