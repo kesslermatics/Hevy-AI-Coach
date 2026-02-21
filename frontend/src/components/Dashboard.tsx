@@ -13,6 +13,24 @@ import ActivityHeatmap from './ActivityHeatmap';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
 
+/* ── Format raw ISO date to human-readable ──────────── */
+function formatSessionDate(raw: string): string {
+    try {
+        const d = new Date(raw);
+        if (isNaN(d.getTime())) return raw;
+        const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+        const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+        const day = days[d.getDay()];
+        const date = d.getDate();
+        const month = months[d.getMonth()];
+        const hours = d.getHours().toString().padStart(2, '0');
+        const mins = d.getMinutes().toString().padStart(2, '0');
+        return `${day}, ${date}. ${month} • ${hours}:${mins} Uhr`;
+    } catch {
+        return raw;
+    }
+}
+
 /* ── CS2 Rank Colors ────────────────────────────────── */
 const RANK_COLORS: Record<number, string> = {
     0: '#8C8C8C', 1: '#8C8C8C', 2: '#8C8C8C', 3: '#8C8C8C',
@@ -474,7 +492,7 @@ function LastSessionContent({ session }: { session: SessionReviewData['last_sess
                     )}
                 </div>
                 <p className="text-xs text-dark-300 mt-0.5">
-                    {session.date}{session.duration_min ? ` • ${session.duration_min} min` : ''}
+                    {formatSessionDate(session.date)}{session.duration_min ? ` • ${session.duration_min} min` : ''}
                 </p>
             </div>
             <p className="text-cream-200 text-sm leading-relaxed">{session.overall_feedback}</p>
@@ -500,12 +518,12 @@ function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
             : exercise.trend === 'new' ? Sparkles : Minus;
 
     const trendColor = exercise.trend === 'up' ? 'text-green-400'
-        : exercise.trend === 'down' ? 'text-red-400'
-            : exercise.trend === 'new' ? 'text-blue-400' : 'text-dark-300';
+        : exercise.trend === 'down' ? 'text-amber-400'
+            : exercise.trend === 'new' ? 'text-blue-400' : 'text-yellow-400';
 
-    const trendLabel = exercise.trend === 'up' ? 'Improving'
-        : exercise.trend === 'down' ? 'Declined'
-            : exercise.trend === 'new' ? 'First time' : 'Stable';
+    const trendLabel = exercise.trend === 'up' ? 'Breakthrough!'
+        : exercise.trend === 'down' ? 'Recovery Phase'
+            : exercise.trend === 'new' ? 'First time!' : 'Holding Ground';
 
     // Calculate rank progress within current tier (0-100%)
     const rankProgress = ((exercise.rank_index + 1) / 16) * 100;
@@ -534,7 +552,10 @@ function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
                 </div>
                 <div className={`flex items-center gap-1.5 ${trendColor}`}>
                     <TrendIcon size={12} />
-                    <span className="text-[10px] font-medium">{trendLabel}</span>
+                    <span className="text-[10px] font-medium">
+                        {exercise.trend === 'up' ? '🟢' : exercise.trend === 'down' ? '🔴' : exercise.trend === 'stable' ? '🟡' : '🔵'}{' '}
+                        {trendLabel}
+                    </span>
                 </div>
             </div>
 

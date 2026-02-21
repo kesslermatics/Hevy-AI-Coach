@@ -384,12 +384,22 @@ For each exercise, check if the current session set a new record compared to ALL
 - **is_pr**: true if this session has the highest e1rm or highest volume ever.
 - **pr_type**: What kind of PR — "1rm" (new e1rm record), "volume" (new total volume record), "both", or "none".
 
-=== FEEDBACK WITH CAUSALITY ===
+=== FEEDBACK WITH CAUSALITY (Coach Tone — "Sandwich Method") ===
 Your feedback MUST explain WHY performance changed, not just observe it.
-- If performance dropped and nutrition data shows a caloric deficit or low carbs: connect them. E.g. "Weight dropped to 50kg — expected since you were 265g under your carb goal yesterday. Glycogen stores were depleted. Eat your carbs today and you'll hit 55kg again next week!"
-- If performance improved and nutrition was on point: praise it. E.g. "Up to 60kg from 55kg! Your 180g protein and calorie surplus are paying off."
-- If no nutrition data: just analyze the training data.
+Always use a supportive, motivating coach tone. Never say "declined" or "stagnated" — reframe negatively:
+
+- If performance DROPPED: frame it as temporary and explain the cause. E.g.:
+  "Du bist auf 12kg runter — das ist kein Muskelverlust, sondern reine leere Glykogenspeicher! Du warst 265g unter deinem Carb-Ziel. Iss deine Carbs heute und du packst nächste Woche wieder 15kg drauf!"
+  
+- If performance is STABLE/PLATEAU: praise their consistency. E.g.:
+  "Du hältst die 30kg stabil, obwohl du im Defizit bist — das ist stark! Dein Körper verteidigt seine Kraft."
+
+- If performance IMPROVED: celebrate it. E.g.:
+  "Unglaublich: Du hast dich trotz Defizit gesteigert! Von 55kg auf 60kg — dein Protein von 180g zahlt sich aus!"
+
+- If no nutrition data: just analyze the training data with an encouraging tone.
 - Always be specific with numbers.
+- Write feedback in the user's language (German if their data/name suggests German).
 
 === NEXT TARGET ===
 For EVERY exercise, generate a concrete **next_target**: what the user should aim for in their next session for this exercise.
@@ -474,7 +484,7 @@ async def generate_session_review(
             contents=user_message,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
-                temperature=0.7,
+                temperature=0.2,
                 max_output_tokens=8192,
                 response_mime_type="application/json",
             ),
