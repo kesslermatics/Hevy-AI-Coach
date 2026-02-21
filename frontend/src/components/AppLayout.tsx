@@ -47,26 +47,26 @@ export default function AppLayout() {
 
     return (
         <LanguageContext.Provider value={lang}>
-        <div className="min-h-dvh flex flex-col">
-            {/* Header */}
-            <header className="border-b border-dark-500/50 bg-dark-800/60 backdrop-blur-md sticky top-0 z-50">
-                <div className="max-w-3xl mx-auto flex items-center justify-between px-4 py-3">
-                    <div className="flex items-center gap-2.5">
-                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-gold-500 to-gold-700 flex items-center justify-center">
-                            <Dumbbell className="w-5 h-5 text-dark-900" />
+            <div className="min-h-dvh flex flex-col">
+                {/* Header */}
+                <header className="border-b border-dark-500/50 bg-dark-800/60 backdrop-blur-md sticky top-0 z-50">
+                    <div className="max-w-3xl mx-auto flex items-center justify-between px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-gold-500 to-gold-700 flex items-center justify-center">
+                                <Dumbbell className="w-5 h-5 text-dark-900" />
+                            </div>
+                            <span className="text-lg font-bold text-gradient-gold hidden sm:inline">AI Coach</span>
                         </div>
-                        <span className="text-lg font-bold text-gradient-gold hidden sm:inline">AI Coach</span>
+
+                        <NavItems onLogout={handleLogout} />
                     </div>
+                </header>
 
-                    <NavItems onLogout={handleLogout} />
-                </div>
-            </header>
-
-            {/* Page content */}
-            <main className="flex-1 w-full max-w-3xl mx-auto px-4 py-6 sm:py-10">
-                <Outlet context={{ user, refreshUser }} />
-            </main>
-        </div>
+                {/* Page content */}
+                <main className="flex-1 w-full max-w-3xl mx-auto px-4 py-6 sm:py-10">
+                    <Outlet context={{ user, refreshUser }} />
+                </main>
+            </div>
         </LanguageContext.Provider>
     );
 }

@@ -99,7 +99,7 @@ export default function SettingsPage() {
                         className={`flex-1 py-3 px-4 rounded-xl border text-sm font-medium transition-all cursor-pointer ${lang === 'de'
                             ? 'bg-gold-500/15 border-gold-500/40 text-gold-400'
                             : 'bg-dark-700/40 border-dark-500/30 text-dark-300 hover:border-dark-400'
-                        }`}>
+                            }`}>
                         🇩🇪 {t('settings.languageDe')}
                     </button>
                     <button
@@ -107,7 +107,7 @@ export default function SettingsPage() {
                         className={`flex-1 py-3 px-4 rounded-xl border text-sm font-medium transition-all cursor-pointer ${lang === 'en'
                             ? 'bg-gold-500/15 border-gold-500/40 text-gold-400'
                             : 'bg-dark-700/40 border-dark-500/30 text-dark-300 hover:border-dark-400'
-                        }`}>
+                            }`}>
                         🇬🇧 {t('settings.languageEn')}
                     </button>
                 </div>
