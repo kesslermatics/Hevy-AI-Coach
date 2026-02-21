@@ -54,7 +54,24 @@ RANK_TIERS = [
 ]
 
 
-def _build_system_prompt(profile: Optional[dict]) -> str:
+def _language_instruction(lang: str) -> str:
+    """Return a system prompt snippet enforcing the output language."""
+    if lang == "de":
+        return (
+            "\n\n=== LANGUAGE ===\n"
+            "You MUST write ALL text values in **German (Deutsch)**. "
+            "Every string field in the JSON must be in German. "
+            "Use natural, conversational German — not stiff/formal. "
+            "Technical terms (exercise names) stay in English."
+        )
+    return (
+        "\n\n=== LANGUAGE ===\n"
+        "You MUST write ALL text values in **English**. "
+        "Every string field in the JSON must be in English."
+    )
+
+
+def _build_system_prompt(profile: Optional[dict], lang: str = "de") -> str:
     """Build the system prompt for the AI with user-specific context from Yazio."""
     # Extract profile info (all from Yazio)
     p = profile or {}
@@ -96,7 +113,7 @@ def _build_system_prompt(profile: Optional[dict]) -> str:
 
     user_context = "\n".join(context_lines)
 
-    return f"""You are a supportive, friendly fitness coach. Your name is Coach.
+    base_prompt = f"""You are a supportive, friendly fitness coach. Your name is Coach.
 
 === USER PROFILE ===
 {user_context}
@@ -166,6 +183,7 @@ You MUST respond with valid JSON matching this exact schema:
 }}
 
 Respond ONLY with the JSON object. No markdown, no explanation."""
+    return base_prompt + _language_instruction(lang)
 
 
 def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -> str:
@@ -241,6 +259,7 @@ async def generate_daily_briefing(
     yazio_data: Optional[dict],
     hevy_data: Optional[list],
     weather_data: Optional[dict] = None,
+    language: str = "de",
 ) -> dict:
     """
     Call Google Gemini to generate a morning briefing.
@@ -253,7 +272,7 @@ async def generate_daily_briefing(
 
     # Extract profile from Yazio data (name, height, weight, goal, diet…)
     profile = yazio_data.get("profile") if yazio_data else None
-    system_prompt = _build_system_prompt(profile)
+    system_prompt = _build_system_prompt(profile, lang=language)
     user_message = _build_user_message(yazio_data, hevy_data)
 
     # Append weather data if available
@@ -327,7 +346,7 @@ async def generate_daily_briefing(
         return FALLBACK_BRIEFING
 
 
-def _build_session_review_prompt(profile: Optional[dict]) -> str:
+def _build_session_review_prompt(profile: Optional[dict], lang: str = "de") -> str:
     """Build system prompt specifically for session review + next session analysis."""
     p = profile or {}
     name = " ".join(filter(None, [p.get("first_name"), p.get("last_name")])) or "Athlete"
@@ -350,7 +369,7 @@ def _build_session_review_prompt(profile: Optional[dict]) -> str:
 
     user_context = "\n".join(context_lines)
 
-    return f"""You are a supportive, friendly fitness coach. Your name is Coach.
+    base_prompt = f"""You are a supportive, friendly fitness coach. Your name is Coach.
 
 === USER PROFILE ===
 {user_context}
@@ -399,7 +418,6 @@ Always use a supportive, motivating coach tone. Never say "declined" or "stagnat
 
 - If no nutrition data: just analyze the training data with an encouraging tone.
 - Always be specific with numbers.
-- Write feedback in the user's language (German if their data/name suggests German).
 
 === NEXT TARGET ===
 For EVERY exercise, generate a concrete **next_target**: what the user should aim for in their next session for this exercise.
@@ -462,11 +480,13 @@ You MUST respond with valid JSON matching this exact schema:
 }}
 
 Respond ONLY with the JSON object. No markdown, no explanation."""
+    return base_prompt + _language_instruction(lang)
 
 
 async def generate_session_review(
     yazio_data: Optional[dict],
     hevy_data: Optional[list],
+    language: str = "de",
 ) -> dict:
     """
     Call Gemini to generate a detailed session review + next session suggestion.
@@ -475,7 +495,7 @@ async def generate_session_review(
     client = genai.Client(api_key=settings.gemini_api_key)
 
     profile = yazio_data.get("profile") if yazio_data else None
-    system_prompt = _build_session_review_prompt(profile)
+    system_prompt = _build_session_review_prompt(profile, lang=language)
     user_message = _build_user_message(yazio_data, hevy_data)  # Include nutrition for causality
 
     try:
@@ -539,7 +559,7 @@ async def generate_session_review(
         return FALLBACK_SESSION_REVIEW
 
 
-def _build_workout_tips_prompt(profile: Optional[dict]) -> str:
+def _build_workout_tips_prompt(profile: Optional[dict], lang: str = "de") -> str:
     """Build system prompt for workout-specific tips and suggestions."""
     p = profile or {}
     name = " ".join(filter(None, [p.get("first_name"), p.get("last_name")])) or "Athlete"
@@ -571,7 +591,7 @@ def _build_workout_tips_prompt(profile: Optional[dict]) -> str:
 
     user_context = "\n".join(context_lines)
 
-    return f"""You are a supportive, friendly fitness coach. Your name is Coach.
+    base_prompt = f"""You are a supportive, friendly fitness coach. Your name is Coach.
 
 === USER PROFILE ===
 {user_context}
@@ -628,12 +648,14 @@ You MUST respond with valid JSON matching this exact schema:
 }}
 
 Respond ONLY with the JSON object. No markdown, no explanation."""
+    return base_prompt + _language_instruction(lang)
 
 
 async def generate_workout_tips(
     yazio_data: Optional[dict],
     hevy_data: Optional[list],
     workout_index: int,
+    language: str = "de",
 ) -> dict:
     """
     Call Gemini to generate tips for a specific selected workout.
@@ -644,7 +666,7 @@ async def generate_workout_tips(
     client = genai.Client(api_key=settings.gemini_api_key)
 
     profile = yazio_data.get("profile") if yazio_data else None
-    system_prompt = _build_workout_tips_prompt(profile)
+    system_prompt = _build_workout_tips_prompt(profile, lang=language)
 
     # Build user message: selected workout highlighted + context + nutrition
     selected = hevy_data[workout_index]

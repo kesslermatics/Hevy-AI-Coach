@@ -3,6 +3,7 @@ import { useNavigate, useOutletContext } from 'react-router-dom';
 import { saveApiKey, saveYazioCredentials } from '../api/api';
 import type { UserInfo } from '../api/api';
 import { Key, UtensilsCrossed, Eye, EyeOff, ArrowRight, Dumbbell, CheckCircle } from 'lucide-react';
+import { useLanguage } from '../i18n';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
 
@@ -16,6 +17,7 @@ function getInitialStep(user: UserInfo | null): Step {
 export default function SetupPage() {
     const navigate = useNavigate();
     const { user, refreshUser } = useOutletContext<LayoutContext>();
+    const { t } = useLanguage();
 
     const [step, setStep] = useState<Step>(getInitialStep(user));
 
@@ -36,7 +38,7 @@ export default function SetupPage() {
         setKeyMsg(null); setSavingKey(true);
         try {
             await saveApiKey(apiKey);
-            setKeyMsg({ type: 'success', text: 'Hevy API Key saved!' });
+            setKeyMsg({ type: 'success', text: t('setup.hevySaved') });
             await refreshUser();
             setApiKey('');
             setTimeout(() => setStep('yazio'), 800);
@@ -49,7 +51,7 @@ export default function SetupPage() {
         setYazioMsg(null); setSavingYazio(true);
         try {
             await saveYazioCredentials(yazioEmail, yazioPassword);
-            setYazioMsg({ type: 'success', text: 'Yazio connected!' });
+            setYazioMsg({ type: 'success', text: t('setup.yazioConnected') });
             await refreshUser();
             setYazioEmail(''); setYazioPassword('');
             setTimeout(() => navigate('/dashboard'), 800);
@@ -64,8 +66,8 @@ export default function SetupPage() {
                 <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-gold-500 to-gold-700 mb-4">
                     <Dumbbell className="w-8 h-8 text-dark-900" />
                 </div>
-                <h1 className="text-2xl font-bold text-cream-50">Let's get you set up</h1>
-                <p className="text-dark-300 mt-1 text-sm">Connect your accounts to unlock AI coaching</p>
+                <h1 className="text-2xl font-bold text-cream-50">{t('setup.title')}</h1>
+                <p className="text-dark-300 mt-1 text-sm">{t('setup.subtitle')}</p>
             </div>
 
             {/* Step indicator */}
@@ -80,15 +82,15 @@ export default function SetupPage() {
                 <div className="card-glass p-6 space-y-4">
                     <div className="flex items-center gap-3">
                         <Key className="w-5 h-5 text-gold-400" />
-                        <h3 className="text-lg font-semibold text-cream-50">Hevy API Key</h3>
+                        <h3 className="text-lg font-semibold text-cream-50">{t('setup.hevyTitle')}</h3>
                     </div>
                     <p className="text-dark-300 text-sm">
-                        Enter your Hevy API key to connect your workout data. Find it in your{' '}
+                        {t('setup.hevyDesc')}{' '}
                         <a href="https://api.hevyapp.com/account" target="_blank" rel="noopener noreferrer"
                             className="text-gold-400 hover:text-gold-300 underline underline-offset-2">
-                            Hevy Developer Settings
+                            {t('setup.hevyLink')}
                         </a>.
-                        Your key is <span className="text-cream-200">encrypted</span> before storage.
+                        {' '}{t('setup.hevyEncrypted')}.
                     </p>
                     <form onSubmit={handleSaveHevy} className="space-y-4">
                         <input type="password" className="input-dark font-mono text-sm"
@@ -97,13 +99,13 @@ export default function SetupPage() {
                         <Msg msg={keyMsg} />
                         <button type="submit" disabled={savingKey}
                             className="btn-gold w-full flex items-center justify-center gap-2">
-                            {savingKey ? 'Saving…' : <><span>Save & Continue</span><ArrowRight size={16} /></>}
+                            {savingKey ? t('settings.saving') : <><span>{t('setup.saveAndContinue')}</span><ArrowRight size={16} /></>}
                         </button>
                     </form>
                     {user?.has_hevy_key && (
                         <button onClick={() => setStep('yazio')}
                             className="w-full text-center text-sm text-gold-400 hover:text-gold-300 transition-colors cursor-pointer">
-                            Already set — skip to Yazio →
+                            {t('setup.skipToYazio')}
                         </button>
                     )}
                 </div>
@@ -114,12 +116,11 @@ export default function SetupPage() {
                 <div className="card-glass p-6 space-y-4">
                     <div className="flex items-center gap-3">
                         <UtensilsCrossed className="w-5 h-5 text-gold-400" />
-                        <h3 className="text-lg font-semibold text-cream-50">Yazio Account</h3>
+                        <h3 className="text-lg font-semibold text-cream-50">{t('setup.yazioTitle')}</h3>
                     </div>
                     <p className="text-dark-300 text-sm">
-                        Enter your Yazio login so we can fetch your daily nutrition data.
-                        Your goal, weight, and body stats will be imported automatically from Yazio.
-                        Credentials are <span className="text-cream-200">encrypted</span> and never stored in plain text.
+                        {t('setup.yazioDesc')}{' '}
+                        <span className="text-cream-200">{t('setup.hevyEncrypted')}</span>.
                     </p>
                     <form onSubmit={handleSaveYazio} className="space-y-4">
                         <input type="email" className="input-dark text-sm"
@@ -137,12 +138,12 @@ export default function SetupPage() {
                         <Msg msg={yazioMsg} />
                         <button type="submit" disabled={savingYazio}
                             className="btn-gold w-full flex items-center justify-center gap-2">
-                            {savingYazio ? 'Saving…' : <><span>Connect & Start Coaching</span><ArrowRight size={16} /></>}
+                            {savingYazio ? t('settings.saving') : <><span>{t('setup.connectAndStart')}</span><ArrowRight size={16} /></>}
                         </button>
                     </form>
                     <button onClick={() => setStep('hevy')}
                         className="w-full text-center text-sm text-dark-300 hover:text-cream-100 transition-colors cursor-pointer">
-                        ← Back to Hevy
+                        {t('setup.backToHevy')}
                     </button>
                 </div>
             )}

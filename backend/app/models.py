@@ -22,6 +22,8 @@ class User(Base):
     yazio_password = Column(String(512), nullable=True)      # Encrypted with Fernet
     current_goal = Column(String(100), nullable=True)        # e.g. "Lean Bulk", "Cut", "Maintain"
     target_weight = Column(Float, nullable=True)             # in kg
+    first_name = Column(String(100), nullable=True)          # From Yazio profile
+    language = Column(String(5), nullable=False, server_default="de")  # "de" or "en"
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 

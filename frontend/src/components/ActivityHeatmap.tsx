@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { Loader2, Dumbbell, UtensilsCrossed, Calendar } from 'lucide-react';
 import { getActivityHeatmap } from '../api/api';
 import type { ActivityHeatmapData } from '../api/api';
+import { useLanguage } from '../i18n';
 
 interface DayData {
     date: string;
@@ -20,8 +21,10 @@ interface DayData {
 
 type TooltipData = DayData & { x: number; y: number };
 
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const DAYS = ['Mon', '', 'Wed', '', 'Fri', '', 'Sun'];
+const MONTHS_EN = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MONTHS_DE = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+const DAYS_EN = ['Mon', '', 'Wed', '', 'Fri', '', 'Sun'];
+const DAYS_DE = ['Mo', '', 'Mi', '', 'Fr', '', 'So'];
 
 function getDayColor(day: DayData): string {
     if (day.workout && day.nutrition) return '#A855F7';   // purple – both
@@ -40,6 +43,10 @@ export default function ActivityHeatmap() {
     const [data, setData] = useState<ActivityHeatmapData | null>(null);
     const [loading, setLoading] = useState(true);
     const [tooltip, setTooltip] = useState<TooltipData | null>(null);
+    const { t, lang } = useLanguage();
+
+    const MONTHS = lang === 'de' ? MONTHS_DE : MONTHS_EN;
+    const DAYS = lang === 'de' ? DAYS_DE : DAYS_EN;
 
     useEffect(() => {
         getActivityHeatmap()
@@ -56,8 +63,8 @@ export default function ActivityHeatmap() {
                         <Calendar className="w-5 h-5" />
                     </div>
                     <div>
-                        <h3 className="text-sm font-semibold text-cream-50">Activity Heatmap</h3>
-                        <p className="text-xs text-dark-300">Loading your history…</p>
+                        <h3 className="text-sm font-semibold text-cream-50">{t('activity.title')}</h3>
+                        <p className="text-xs text-dark-300">{t('activity.loading')}</p>
                     </div>
                 </div>
                 <div className="py-8 flex justify-center">
@@ -150,8 +157,8 @@ export default function ActivityHeatmap() {
                     <Calendar className="w-5 h-5" />
                 </div>
                 <div>
-                    <h3 className="text-sm font-semibold text-cream-50">Activity Heatmap</h3>
-                    <p className="text-xs text-dark-300">Last {weeksToShow} weeks of workouts & nutrition tracking</p>
+                    <h3 className="text-sm font-semibold text-cream-50">{t('activity.title')}</h3>
+                    <p className="text-xs text-dark-300">{t('activity.subtitle', { weeks: String(weeksToShow) })}</p>
                 </div>
             </div>
 
@@ -159,15 +166,15 @@ export default function ActivityHeatmap() {
             <div className="flex items-center gap-4 mb-4 text-xs">
                 <div className="flex items-center gap-1.5 text-blue-400">
                     <Dumbbell size={12} />
-                    <span className="text-cream-200">{totalWorkouts} workouts</span>
+                    <span className="text-cream-200">{t('activity.workouts', { n: String(totalWorkouts) })}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-green-400">
                     <UtensilsCrossed size={12} />
-                    <span className="text-cream-200">{totalNutritionDays} days tracked</span>
+                    <span className="text-cream-200">{t('activity.daysTracked', { n: String(totalNutritionDays) })}</span>
                 </div>
                 {bothDays > 0 && (
                     <div className="flex items-center gap-1.5 text-purple-400">
-                        <span className="text-cream-200">{bothDays} both</span>
+                        <span className="text-cream-200">{t('activity.both', { n: String(bothDays) })}</span>
                     </div>
                 )}
             </div>
@@ -249,18 +256,18 @@ export default function ActivityHeatmap() {
                 <div className="flex items-center gap-3">
                     <div className="flex items-center gap-1.5">
                         <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#3B82F6', opacity: 0.75 }} />
-                        <span className="text-[9px] text-dark-400">Workout</span>
+                        <span className="text-[9px] text-dark-400">{t('activity.workout')}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                         <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#22C55E', opacity: 0.75 }} />
-                        <span className="text-[9px] text-dark-400">Nutrition</span>
+                        <span className="text-[9px] text-dark-400">{t('activity.nutrition')}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
                         <div className="w-2.5 h-2.5 rounded-sm" style={{ backgroundColor: '#A855F7', opacity: 0.95 }} />
-                        <span className="text-[9px] text-dark-400">Both</span>
+                        <span className="text-[9px] text-dark-400">{t('activity.bothLabel')}</span>
                     </div>
                 </div>
-                <span className="text-[9px] text-dark-400">Less → More</span>
+                <span className="text-[9px] text-dark-400">{t('activity.lessMore')}</span>
             </div>
 
             {/* Tooltip (portal-style, fixed position) */}
@@ -274,7 +281,7 @@ export default function ActivityHeatmap() {
                     }}
                 >
                     <p className="text-cream-50 font-medium mb-0.5">
-                        {new Date(tooltip.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        {new Date(tooltip.date + 'T12:00:00').toLocaleDateString(lang === 'de' ? 'de-DE' : 'en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
                     </p>
                     {tooltip.workout && (
                         <p className="text-blue-300 text-[11px]">
@@ -283,11 +290,11 @@ export default function ActivityHeatmap() {
                     )}
                     {tooltip.nutrition && (
                         <p className="text-green-300 text-[11px]">
-                            🍽️ {Math.round(tooltip.calories || 0)} kcal tracked
+                            🍽️ {t('activity.kcalTracked', { n: String(Math.round(tooltip.calories || 0)) })}
                         </p>
                     )}
                     {!tooltip.workout && !tooltip.nutrition && (
-                        <p className="text-dark-400 text-[11px]">No activity</p>
+                        <p className="text-dark-400 text-[11px]">{t('activity.noActivity')}</p>
                     )}
                 </div>
             )}

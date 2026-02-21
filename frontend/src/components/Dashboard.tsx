@@ -10,22 +10,28 @@ import {
 } from 'lucide-react';
 import MuscleHeatmap from './MuscleHeatmap';
 import ActivityHeatmap from './ActivityHeatmap';
+import { useLanguage } from '../i18n';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
 
 /* ── Format raw ISO date to human-readable ──────────── */
-function formatSessionDate(raw: string): string {
+function formatSessionDate(raw: string, lang: string): string {
     try {
         const d = new Date(raw);
         if (isNaN(d.getTime())) return raw;
-        const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
-        const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
-        const day = days[d.getDay()];
-        const date = d.getDate();
-        const month = months[d.getMonth()];
-        const hours = d.getHours().toString().padStart(2, '0');
-        const mins = d.getMinutes().toString().padStart(2, '0');
-        return `${day}, ${date}. ${month} • ${hours}:${mins} Uhr`;
+        if (lang === 'de') {
+            const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+            const months = ['Jan', 'Feb', 'Mär', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Dez'];
+            const day = days[d.getDay()];
+            const date = d.getDate();
+            const month = months[d.getMonth()];
+            const hours = d.getHours().toString().padStart(2, '0');
+            const mins = d.getMinutes().toString().padStart(2, '0');
+            return `${day}, ${date}. ${month} • ${hours}:${mins} Uhr`;
+        }
+        // English
+        return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+            + ' • ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
     } catch {
         return raw;
     }
@@ -42,6 +48,7 @@ const RANK_COLORS: Record<number, string> = {
 
 export default function Dashboard() {
     const { user } = useOutletContext<LayoutContext>();
+    const { t, lang } = useLanguage();
     const [briefing, setBriefing] = useState<Briefing | null>(null);
     const [loading, setLoading] = useState(true);
     const [regenerating, setRegenerating] = useState(false);
@@ -172,12 +179,12 @@ export default function Dashboard() {
             <div className="flex items-start justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-cream-50">
-                        Good morning, <span className="text-gradient-gold">{user?.username}</span>
+                        {t('dashboard.goodMorning')} <span className="text-gradient-gold">{user?.username}</span>
                     </h1>
                     <div className="flex items-center gap-3 mt-1">
                         <p className="text-dark-300 text-sm flex items-center gap-1.5">
                             <Sunrise size={14} />
-                            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                            {new Date().toLocaleDateString(lang === 'de' ? 'de-DE' : 'en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
                         </p>
                         {weather && weather.temperature_c != null && (
                             <p className="text-dark-300 text-sm flex items-center gap-1.5">
@@ -191,7 +198,7 @@ export default function Dashboard() {
                     <button onClick={handleRegenerate} disabled={regenerating}
                         className="flex items-center gap-1.5 text-xs text-dark-300 hover:text-gold-400 transition-colors cursor-pointer mt-1">
                         <RefreshCw size={14} className={regenerating ? 'animate-spin' : ''} />
-                        {regenerating ? 'Generating…' : 'Refresh'}
+                        {regenerating ? t('dashboard.refreshing') : t('dashboard.refresh')}
                     </button>
                 )}
             </div>
@@ -200,8 +207,8 @@ export default function Dashboard() {
             {loading && (
                 <div className="card-glass p-12 text-center space-y-3">
                     <Loader2 className="w-8 h-8 text-gold-400 animate-spin mx-auto" />
-                    <p className="text-dark-300 text-sm">Generating your morning briefing…</p>
-                    <p className="text-dark-400 text-xs">Analyzing workouts & nutrition</p>
+                    <p className="text-dark-300 text-sm">{t('dashboard.generating')}</p>
+                    <p className="text-dark-400 text-xs">{t('dashboard.analyzing')}</p>
                 </div>
             )}
 
@@ -210,7 +217,7 @@ export default function Dashboard() {
                 <div className="card-glass p-6 text-center space-y-3">
                     <p className="text-red-400 text-sm">{error}</p>
                     <button onClick={retryBriefing}
-                        className="btn-gold text-sm px-6 py-2 mx-auto">Try Again</button>
+                        className="btn-gold text-sm px-6 py-2 mx-auto">{t('dashboard.tryAgain')}</button>
                 </div>
             )}
 
@@ -232,21 +239,21 @@ export default function Dashboard() {
                                 <UtensilsCrossed className="w-5 h-5" />
                             </div>
                             <div>
-                                <h2 className="text-sm font-semibold text-cream-50">Nutrition Review</h2>
-                                <p className="text-xs text-dark-300">Yesterday's nutrition breakdown</p>
+                                <h2 className="text-sm font-semibold text-cream-50">{t('dashboard.nutritionTitle')}</h2>
+                                <p className="text-xs text-dark-300">{t('dashboard.nutritionSubtitle')}</p>
                             </div>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            <MacroCard icon={<Flame className="w-4 h-4" />} label="Calories"
+                            <MacroCard icon={<Flame className="w-4 h-4" />} label={t('dashboard.calories')}
                                 text={data.nutrition_review.calories}
                                 color="text-orange-400" bg="bg-orange-500/10 border-orange-500/20" />
-                            <MacroCard icon={<Beef className="w-4 h-4" />} label="Protein"
+                            <MacroCard icon={<Beef className="w-4 h-4" />} label={t('dashboard.protein')}
                                 text={data.nutrition_review.protein}
                                 color="text-red-400" bg="bg-red-500/10 border-red-500/20" />
-                            <MacroCard icon={<Wheat className="w-4 h-4" />} label="Carbs"
+                            <MacroCard icon={<Wheat className="w-4 h-4" />} label={t('dashboard.carbs')}
                                 text={data.nutrition_review.carbs}
                                 color="text-yellow-400" bg="bg-yellow-500/10 border-yellow-500/20" />
-                            <MacroCard icon={<Droplets className="w-4 h-4" />} label="Fat"
+                            <MacroCard icon={<Droplets className="w-4 h-4" />} label={t('dashboard.fat')}
                                 text={data.nutrition_review.fat}
                                 color="text-emerald-400" bg="bg-emerald-500/10 border-emerald-500/20" />
                         </div>
@@ -259,8 +266,8 @@ export default function Dashboard() {
                                 <Dumbbell className="w-5 h-5" />
                             </div>
                             <div>
-                                <h3 className="text-sm font-semibold text-cream-50">Workout Suggestion</h3>
-                                <p className="text-xs text-dark-300">Today's training focus</p>
+                                <h3 className="text-sm font-semibold text-cream-50">{t('dashboard.workoutTitle')}</h3>
+                                <p className="text-xs text-dark-300">{t('dashboard.workoutSubtitle')}</p>
                             </div>
                         </div>
                         <p className="text-cream-200 text-sm leading-relaxed">{data.workout_suggestion}</p>
@@ -274,8 +281,8 @@ export default function Dashboard() {
                                     <Activity className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-semibold text-cream-50">Muscle Recovery</h3>
-                                    <p className="text-xs text-dark-300">Based on your recent workouts</p>
+                                    <h3 className="text-sm font-semibold text-cream-50">{t('dashboard.recoveryTitle')}</h3>
+                                    <p className="text-xs text-dark-300">{t('dashboard.recoverySubtitle')}</p>
                                 </div>
                             </div>
                             <MuscleHeatmap recovery={data.muscle_recovery} />
@@ -290,8 +297,8 @@ export default function Dashboard() {
                                     <Scale className="w-5 h-5" />
                                 </div>
                                 <div>
-                                    <h3 className="text-sm font-semibold text-cream-50">Weight Trend</h3>
-                                    <p className="text-xs text-dark-300">Your journey progress</p>
+                                    <h3 className="text-sm font-semibold text-cream-50">{t('dashboard.weightTitle')}</h3>
+                                    <p className="text-xs text-dark-300">{t('dashboard.weightSubtitle')}</p>
                                 </div>
                             </div>
                             <p className="text-cream-200 text-sm leading-relaxed">{data.weight_trend}</p>
@@ -305,8 +312,8 @@ export default function Dashboard() {
                             <div className="w-10 h-10 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                                 <Trophy className="w-5 h-5 text-purple-400" />
                             </div>
-                            <h3 className="text-sm font-semibold text-cream-50 mb-1">Last Session</h3>
-                            <p className="text-xs text-dark-300">Review, rankings & progression</p>
+                            <h3 className="text-sm font-semibold text-cream-50 mb-1">{t('dashboard.lastSession')}</h3>
+                            <p className="text-xs text-dark-300">{t('dashboard.lastSessionDesc')}</p>
                         </button>
 
                         <button onClick={() => openSessionModal('next')}
@@ -314,8 +321,8 @@ export default function Dashboard() {
                             <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                                 <Crosshair className="w-5 h-5 text-blue-400" />
                             </div>
-                            <h3 className="text-sm font-semibold text-cream-50 mb-1">Workout Tips</h3>
-                            <p className="text-xs text-dark-300">Pick a session for AI coaching</p>
+                            <h3 className="text-sm font-semibold text-cream-50 mb-1">{t('dashboard.workoutTips')}</h3>
+                            <p className="text-xs text-dark-300">{t('dashboard.workoutTipsDesc')}</p>
                         </button>
                     </div>
 
@@ -323,7 +330,7 @@ export default function Dashboard() {
                     <div className="card-glass p-6 border-l-4 border-gold-500">
                         <div className="flex items-center gap-3 mb-3">
                             <Target className="w-5 h-5 text-gold-400" />
-                            <h3 className="text-sm font-semibold text-cream-50">Daily Mission</h3>
+                            <h3 className="text-sm font-semibold text-cream-50">{t('dashboard.dailyMission')}</h3>
                         </div>
                         <p className="text-cream-100 text-sm leading-relaxed italic">
                             "{data.daily_mission}"
@@ -383,6 +390,7 @@ function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, 
         onBackToList: () => void;
         onRetrySession: () => void;
     }) {
+    const { t } = useLanguage();
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -400,7 +408,7 @@ function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, 
                                 ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
                                 : 'text-dark-300 hover:text-cream-100'
                                 }`}>
-                            <Trophy size={12} className="inline mr-1.5" />Last Session
+                            <Trophy size={12} className="inline mr-1.5" />{t('dashboard.lastSession')}
                         </button>
                         <button
                             onClick={() => onTabChange('next')}
@@ -408,7 +416,7 @@ function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, 
                                 ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
                                 : 'text-dark-300 hover:text-cream-100'
                                 }`}>
-                            <Crosshair size={12} className="inline mr-1.5" />Workout Tips
+                            <Crosshair size={12} className="inline mr-1.5" />{t('dashboard.workoutTips')}
                         </button>
                     </div>
                     <button onClick={onClose}
@@ -421,7 +429,7 @@ function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, 
                 <div className="flex-1 overflow-y-auto p-5">
                     {tab === 'last' && (
                         <>
-                            {sessionLoading && <ModalLoader text="Analyzing your last session…" />}
+                            {sessionLoading && <ModalLoader text={t('modal.analyzingSession')} />}
                             {sessionError && !sessionLoading && (
                                 <ModalError message={sessionError} onRetry={onRetrySession} />
                             )}
@@ -435,11 +443,11 @@ function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, 
                             {selectedWorkoutTips ? (
                                 <WorkoutTipsContent tips={selectedWorkoutTips} onBack={onBackToList} />
                             ) : tipsLoading ? (
-                                <ModalLoader text="Generating tips for this workout…" />
+                                <ModalLoader text={t('modal.generatingTips')} />
                             ) : tipsError ? (
                                 <ModalError message={tipsError} onRetry={onBackToList} />
                             ) : workoutsLoading ? (
-                                <ModalLoader text="Loading your workouts…" />
+                                <ModalLoader text={t('modal.loadingWorkouts')} />
                             ) : (
                                 <WorkoutPicker workouts={workoutList || []} onSelect={onSelectWorkout} />
                             )}
@@ -452,20 +460,22 @@ function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, 
 }
 
 function ModalLoader({ text }: { text: string }) {
+    const { t } = useLanguage();
     return (
         <div className="py-16 text-center space-y-3">
             <Loader2 className="w-8 h-8 text-gold-400 animate-spin mx-auto" />
             <p className="text-dark-300 text-sm">{text}</p>
-            <p className="text-dark-400 text-xs">This may take a few seconds</p>
+            <p className="text-dark-400 text-xs">{t('modal.mayTakeSeconds')}</p>
         </div>
     );
 }
 
 function ModalError({ message, onRetry }: { message: string; onRetry: () => void }) {
+    const { t } = useLanguage();
     return (
         <div className="py-16 text-center space-y-3">
             <p className="text-red-400 text-sm">{message}</p>
-            <button onClick={onRetry} className="btn-gold text-sm px-6 py-2">Retry</button>
+            <button onClick={onRetry} className="btn-gold text-sm px-6 py-2">{t('modal.retry')}</button>
         </div>
     );
 }
@@ -473,8 +483,9 @@ function ModalError({ message, onRetry }: { message: string; onRetry: () => void
 /* ── Last Session Content ───────────────────────────── */
 
 function LastSessionContent({ session }: { session: SessionReviewData['last_session'] }) {
+    const { t, lang } = useLanguage();
     if (!session) {
-        return <p className="text-dark-300 text-sm text-center py-8">No recent session data available.</p>;
+        return <p className="text-dark-300 text-sm text-center py-8">{t('modal.noSessionData')}</p>;
     }
 
     const prCount = session.exercises.filter(e => e.is_pr).length;
@@ -492,7 +503,7 @@ function LastSessionContent({ session }: { session: SessionReviewData['last_sess
                     )}
                 </div>
                 <p className="text-xs text-dark-300 mt-0.5">
-                    {formatSessionDate(session.date)}{session.duration_min ? ` • ${session.duration_min} min` : ''}
+                    {formatSessionDate(session.date, lang)}{session.duration_min ? ` • ${session.duration_min} min` : ''}
                 </p>
             </div>
             <p className="text-cream-200 text-sm leading-relaxed">{session.overall_feedback}</p>
@@ -510,6 +521,7 @@ function LastSessionContent({ session }: { session: SessionReviewData['last_sess
 /* ── Exercise Card — Full Redesign ──────────────────── */
 
 function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
+    const { t } = useLanguage();
     const rankColor = RANK_COLORS[exercise.rank_index] ?? '#8C8C8C';
     const nextRankColor = RANK_COLORS[Math.min(exercise.rank_index + 1, 15)] ?? '#D4A017';
 
@@ -521,9 +533,9 @@ function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
         : exercise.trend === 'down' ? 'text-amber-400'
             : exercise.trend === 'new' ? 'text-blue-400' : 'text-yellow-400';
 
-    const trendLabel = exercise.trend === 'up' ? 'Breakthrough!'
-        : exercise.trend === 'down' ? 'Recovery Phase'
-            : exercise.trend === 'new' ? 'First time!' : 'Holding Ground';
+    const trendLabel = exercise.trend === 'up' ? t('exercise.breakthrough')
+        : exercise.trend === 'down' ? t('exercise.recoveryPhase')
+            : exercise.trend === 'new' ? t('exercise.firstTime') : t('exercise.holdingGround');
 
     // Calculate rank progress within current tier (0-100%)
     const rankProgress = ((exercise.rank_index + 1) / 16) * 100;
@@ -538,7 +550,7 @@ function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
                     <div className="absolute top-2 right-2 flex items-center gap-1 px-2 py-1 rounded-lg bg-gradient-to-r from-amber-500/25 to-orange-500/25 border border-amber-500/40">
                         <Zap size={10} className="text-amber-300" />
                         <span className="text-[9px] font-bold text-amber-300 uppercase tracking-wider">
-                            {exercise.pr_type === 'both' ? '1RM + Vol PR' : exercise.pr_type === '1rm' ? '1RM PR' : 'Volume PR'}
+                            {exercise.pr_type === 'both' ? t('exercise.bothPr') : exercise.pr_type === '1rm' ? t('exercise.1rmPr') : t('exercise.volPr')}
                         </span>
                     </div>
                 </div>
@@ -613,7 +625,7 @@ function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
                         </div>
                     )}
                     {exercise.rank_next === 'MAX' && (
-                        <p className="text-[10px] text-gold-400 font-medium text-center">🏆 Maximum rank achieved!</p>
+                        <p className="text-[10px] text-gold-400 font-medium text-center">{t('exercise.maxRank')}</p>
                     )}
                 </div>
             </div>
@@ -626,7 +638,7 @@ function ExerciseCard({ exercise }: { exercise: ExerciseReview }) {
                 <div className="flex items-start gap-2 bg-blue-500/8 border border-blue-500/20 rounded-lg p-2.5">
                     <Target size={12} className="text-blue-400 shrink-0 mt-0.5" />
                     <div>
-                        <p className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider mb-0.5">Next Target</p>
+                        <p className="text-[10px] text-blue-400 font-semibold uppercase tracking-wider mb-0.5">{t('exercise.nextTarget')}</p>
                         <p className="text-blue-200 text-xs font-medium">{exercise.next_target}</p>
                     </div>
                 </div>
@@ -647,6 +659,7 @@ function E1rmChart({ history, currentE1rm, isPr }: {
     currentE1rm: number;
     isPr: boolean;
 }) {
+    const { t, lang } = useLanguage();
     const allE1rm = [...history.map(h => h.e1rm), currentE1rm];
     const maxE1rm = Math.max(...allE1rm, 1);
     const minE1rm = Math.min(...allE1rm);
@@ -684,7 +697,7 @@ function E1rmChart({ history, currentE1rm, isPr }: {
     const areaPath = `${curvePath} L ${points[points.length - 1].x} ${H - padBottom} L ${points[0].x} ${H - padBottom} Z`;
 
     // Date labels
-    const allDates = [...history.map(h => h.date), 'Now'];
+    const allDates = [...history.map(h => h.date), lang === 'de' ? 'Jetzt' : 'Now'];
     const gradientId = `e1rm-grad-${history[0]?.date || 'x'}`;
     const lineColor = isPr ? '#F59E0B' : '#818CF8';
     const lineColorFaded = isPr ? 'rgba(245, 158, 11, 0.15)' : 'rgba(129, 140, 248, 0.15)';
@@ -693,7 +706,7 @@ function E1rmChart({ history, currentE1rm, isPr }: {
         <div className="mt-1 space-y-1">
             <div className="flex items-center justify-between">
                 <p className="text-[10px] text-dark-400 uppercase tracking-wider flex items-center gap-1">
-                    <TrendingUp size={10} />Estimated 1RM Progression
+                    <TrendingUp size={10} />{t('exercise.e1rmProgression')}
                 </p>
                 <div className="flex items-center gap-1.5">
                     <span className="text-[9px] text-dark-400">
@@ -771,7 +784,7 @@ function E1rmChart({ history, currentE1rm, isPr }: {
                     {points.map((p, i) => (
                         <text key={`d-${i}`} x={p.x} y={H - 6} fill="#444" fontSize="7"
                             textAnchor="middle" fontFamily="monospace">
-                            {allDates[i] === 'Now' ? 'Now' : allDates[i]?.slice(5)}
+                            {allDates[i] === (lang === 'de' ? 'Jetzt' : 'Now') ? allDates[i] : allDates[i]?.slice(5)}
                         </text>
                     ))}
                 </svg>
@@ -786,15 +799,16 @@ function WorkoutPicker({ workouts, onSelect }: {
     workouts: WorkoutListItem[];
     onSelect: (index: number) => void;
 }) {
+    const { t } = useLanguage();
     if (workouts.length === 0) {
-        return <p className="text-dark-300 text-sm text-center py-8">No workouts found.</p>;
+        return <p className="text-dark-300 text-sm text-center py-8">{t('picker.noWorkouts')}</p>;
     }
 
     return (
         <div className="space-y-3">
             <div>
-                <h3 className="text-lg font-semibold text-cream-50">Pick a workout</h3>
-                <p className="text-xs text-dark-300 mt-0.5">Select a session to get AI-powered tips & suggestions</p>
+                <h3 className="text-lg font-semibold text-cream-50">{t('picker.title')}</h3>
+                <p className="text-xs text-dark-300 mt-0.5">{t('picker.subtitle')}</p>
             </div>
             <div className="space-y-2">
                 {workouts.map((w) => (
@@ -832,13 +846,14 @@ function WorkoutTipsContent({ tips, onBack }: {
     tips: WorkoutTips;
     onBack: () => void;
 }) {
+    const { t } = useLanguage();
     return (
         <div className="space-y-4">
             {/* Back button + header */}
             <div>
                 <button onClick={onBack}
                     className="flex items-center gap-1.5 text-xs text-dark-300 hover:text-cream-100 transition-colors mb-2 cursor-pointer">
-                    <ArrowLeft size={12} />Back to workouts
+                    <ArrowLeft size={12} />{t('tips.backToWorkouts')}
                 </button>
                 <h3 className="text-lg font-semibold text-cream-50">{tips.workout_title}</h3>
                 {tips.workout_date && (
@@ -850,7 +865,7 @@ function WorkoutTipsContent({ tips, onBack }: {
             {tips.nutrition_context && (
                 <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3.5">
                     <p className="text-[10px] text-amber-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5 font-semibold">
-                        <Flame size={10} />Nutrition Phase
+                        <Flame size={10} />{t('tips.nutritionPhase')}
                     </p>
                     <p className="text-cream-200 text-xs leading-relaxed">{tips.nutrition_context}</p>
                 </div>
@@ -860,7 +875,7 @@ function WorkoutTipsContent({ tips, onBack }: {
             {tips.exercise_tips.length > 0 && (
                 <div>
                     <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <Dumbbell size={10} />Exercise Breakdown
+                        <Dumbbell size={10} />{t('tips.exerciseBreakdown')}
                     </p>
                     <div className="space-y-2.5">
                         {tips.exercise_tips.map((et, i) => (
@@ -890,7 +905,7 @@ function WorkoutTipsContent({ tips, onBack }: {
             {tips.new_exercises_to_try.length > 0 && (
                 <div>
                     <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <Plus size={10} />Try next time
+                        <Plus size={10} />{t('tips.tryNextTime')}
                     </p>
                     <div className="space-y-2">
                         {tips.new_exercises_to_try.map((ne, i) => (

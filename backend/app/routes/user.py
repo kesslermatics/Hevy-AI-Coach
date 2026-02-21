@@ -9,6 +9,7 @@ from app.schemas import (
     UserResponse, ApiKeyUpdate, ApiKeyResponse,
     YazioCredentialsUpdate, YazioCredentialsResponse,
     GoalUpdate, GoalResponse,
+    LanguageUpdate, LanguageResponse,
 )
 from app.dependencies import get_current_user
 from app.encryption import encrypt_value
@@ -29,6 +30,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         has_yazio=current_user.yazio_email is not None,
         current_goal=current_user.current_goal,
         target_weight=current_user.target_weight,
+        language=current_user.language or "de",
     )
 
 
@@ -122,4 +124,21 @@ async def update_goal(
         message="Goal updated successfully",
         current_goal=current_user.current_goal,
         target_weight=current_user.target_weight,
+    )
+
+
+@router.post("/language", response_model=LanguageResponse)
+async def update_language(
+    data: LanguageUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update the user's preferred language (de or en)."""
+    current_user.language = data.language
+    db.commit()
+    db.refresh(current_user)
+
+    return LanguageResponse(
+        message="Language updated successfully",
+        language=current_user.language,
     )

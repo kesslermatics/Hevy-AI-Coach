@@ -1,3 +1,5 @@
+import { useLanguage } from '../i18n';
+
 /**
  * Visual Muscle Recovery Heatmap 🔴🟡🟢
  *
@@ -25,30 +27,32 @@ function getColor(pct: number): string {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
-function getLabel(pct: number): string {
-    if (pct <= 20) return 'Destroyed';
-    if (pct <= 40) return 'Sore';
-    if (pct <= 60) return 'Recovering';
-    if (pct <= 80) return 'Almost Ready';
-    return 'Ready';
-}
-
 export default function MuscleHeatmap({ recovery }: MuscleHeatmapProps) {
+    const { t } = useLanguage();
+
     const muscles = [
-        { key: 'chest', label: 'Chest' },
-        { key: 'back', label: 'Back' },
-        { key: 'shoulders', label: 'Shoulders' },
-        { key: 'biceps', label: 'Biceps' },
-        { key: 'triceps', label: 'Triceps' },
-        { key: 'forearms', label: 'Forearms' },
-        { key: 'abs', label: 'Abs' },
-        { key: 'quads', label: 'Quads' },
-        { key: 'hamstrings', label: 'Hamstrings' },
-        { key: 'glutes', label: 'Glutes' },
-        { key: 'calves', label: 'Calves' },
+        { key: 'chest', label: t('muscle.chest') },
+        { key: 'back', label: t('muscle.backMuscle') },
+        { key: 'shoulders', label: t('muscle.shoulders') },
+        { key: 'biceps', label: t('muscle.biceps') },
+        { key: 'triceps', label: t('muscle.triceps') },
+        { key: 'forearms', label: t('muscle.forearms') },
+        { key: 'abs', label: t('muscle.abs') },
+        { key: 'quads', label: t('muscle.quads') },
+        { key: 'hamstrings', label: t('muscle.hamstrings') },
+        { key: 'glutes', label: t('muscle.glutes') },
+        { key: 'calves', label: t('muscle.calves') },
     ];
 
     const get = (key: string) => recovery[key] ?? 100;
+
+    const getLocalizedLabel = (pct: number): string => {
+        if (pct <= 20) return t('muscle.destroyed');
+        if (pct <= 40) return t('muscle.sore');
+        if (pct <= 60) return t('muscle.recovering');
+        if (pct <= 80) return t('muscle.almostReady');
+        return t('muscle.ready');
+    };
 
     return (
         <div className="space-y-4">
@@ -56,7 +60,7 @@ export default function MuscleHeatmap({ recovery }: MuscleHeatmapProps) {
             <div className="flex items-start justify-center gap-6">
                 {/* Front view */}
                 <div className="text-center">
-                    <p className="text-[10px] text-dark-300 uppercase tracking-wider mb-2">Front</p>
+                    <p className="text-[10px] text-dark-300 uppercase tracking-wider mb-2">{t('muscle.front')}</p>
                     <svg viewBox="0 0 200 400" className="w-28 h-auto">
                         {/* Body outline */}
                         <g opacity="0.15" stroke="#666" strokeWidth="1" fill="none">
@@ -107,7 +111,7 @@ export default function MuscleHeatmap({ recovery }: MuscleHeatmapProps) {
 
                 {/* Back view */}
                 <div className="text-center">
-                    <p className="text-[10px] text-dark-300 uppercase tracking-wider mb-2">Back</p>
+                    <p className="text-[10px] text-dark-300 uppercase tracking-wider mb-2">{t('muscle.back')}</p>
                     <svg viewBox="0 0 200 400" className="w-28 h-auto">
                         {/* Body outline */}
                         <g opacity="0.15" stroke="#666" strokeWidth="1" fill="none">
@@ -175,7 +179,7 @@ export default function MuscleHeatmap({ recovery }: MuscleHeatmapProps) {
                 {[0, 25, 50, 75, 100].map(v => (
                     <div key={v} className="flex items-center gap-1">
                         <div className="w-2 h-2 rounded-sm" style={{ backgroundColor: getColor(v) }} />
-                        <span className="text-[9px] text-dark-400">{getLabel(v)}</span>
+                        <span className="text-[9px] text-dark-400">{getLocalizedLabel(v)}</span>
                     </div>
                 ))}
             </div>

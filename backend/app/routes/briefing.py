@@ -32,6 +32,7 @@ async def _generate_and_save(
     Run the full pipeline: gather data → call AI → persist.
     """
     today = date.today()
+    lang = user.language or "de"
 
     # 1) Aggregate Yazio + Hevy data
     context = await gather_user_context(user)
@@ -41,6 +42,7 @@ async def _generate_and_save(
         yazio_data=context["yazio"],
         hevy_data=context["hevy"],
         weather_data=weather_data,
+        language=lang,
     )
 
     # 3) Persist
@@ -157,6 +159,7 @@ async def get_session_review(
     result = await generate_session_review(
         yazio_data=context["yazio"],
         hevy_data=context["hevy"],
+        language=current_user.language or "de",
     )
 
     return result
@@ -213,6 +216,7 @@ async def get_workout_tips(
         yazio_data=context["yazio"],
         hevy_data=workouts,
         workout_index=body.workout_index,
+        language=current_user.language or "de",
     )
 
     return result

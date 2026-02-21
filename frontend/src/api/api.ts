@@ -63,6 +63,7 @@ export interface UserInfo {
   has_yazio: boolean;
   current_goal: string | null;
   target_weight: number | null;
+  language: 'de' | 'en';
 }
 
 export const getMe = () => apiRequest<UserInfo>('/user/me');
@@ -85,6 +86,12 @@ export const saveGoal = (current_goal: string, target_weight?: number | null) =>
   apiRequest<{ message: string; current_goal: string; target_weight: number | null }>('/user/goal', {
     method: 'POST',
     body: JSON.stringify({ current_goal, target_weight: target_weight ?? null }),
+  });
+
+export const updateLanguage = (language: 'de' | 'en') =>
+  apiRequest<{ message: string; language: string }>('/user/language', {
+    method: 'POST',
+    body: JSON.stringify({ language }),
   });
 
 /* ── Briefing endpoints ─────────────────────────────────── */

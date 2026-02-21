@@ -29,6 +29,7 @@ class UserResponse(BaseModel):
     has_yazio: bool = False
     current_goal: Optional[str] = None
     target_weight: Optional[float] = None
+    language: str = "de"
     
     class Config:
         from_attributes = True
@@ -110,6 +111,19 @@ class GoalResponse(BaseModel):
     message: str
     current_goal: Optional[str] = None
     target_weight: Optional[float] = None
+
+
+# ============ Language Schemas ============
+
+class LanguageUpdate(BaseModel):
+    """Schema for updating user language."""
+    language: str = Field(..., pattern="^(de|en)$", description="Language code: 'de' or 'en'")
+
+
+class LanguageResponse(BaseModel):
+    """Schema for language update response."""
+    message: str
+    language: str
 
 
 # ============ Briefing Schemas ============
