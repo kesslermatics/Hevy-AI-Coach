@@ -5,7 +5,7 @@ import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutList
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
-    Trophy, Crosshair, Star, X, ArrowLeft, Clock, Lightbulb, Plus
+    Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus
 } from 'lucide-react';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
@@ -277,21 +277,21 @@ export default function Dashboard() {
 function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, sessionError,
     workoutList, workoutsLoading, selectedWorkoutTips, tipsLoading, tipsError,
     onSelectWorkout, onBackToList, onRetrySession }: {
-    tab: 'last' | 'next';
-    onTabChange: (t: 'last' | 'next') => void;
-    onClose: () => void;
-    sessionData: SessionReviewData | null;
-    sessionLoading: boolean;
-    sessionError: string | null;
-    workoutList: WorkoutListItem[] | null;
-    workoutsLoading: boolean;
-    selectedWorkoutTips: WorkoutTips | null;
-    tipsLoading: boolean;
-    tipsError: string | null;
-    onSelectWorkout: (index: number) => void;
-    onBackToList: () => void;
-    onRetrySession: () => void;
-}) {
+        tab: 'last' | 'next';
+        onTabChange: (t: 'last' | 'next') => void;
+        onClose: () => void;
+        sessionData: SessionReviewData | null;
+        sessionLoading: boolean;
+        sessionError: string | null;
+        workoutList: WorkoutListItem[] | null;
+        workoutsLoading: boolean;
+        selectedWorkoutTips: WorkoutTips | null;
+        tipsLoading: boolean;
+        tipsError: string | null;
+        onSelectWorkout: (index: number) => void;
+        onBackToList: () => void;
+        onRetrySession: () => void;
+    }) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
             onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -306,16 +306,16 @@ function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, 
                         <button
                             onClick={() => onTabChange('last')}
                             className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${tab === 'last'
-                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
-                                    : 'text-dark-300 hover:text-cream-100'
+                                ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                                : 'text-dark-300 hover:text-cream-100'
                                 }`}>
                             <Trophy size={12} className="inline mr-1.5" />Last Session
                         </button>
                         <button
                             onClick={() => onTabChange('next')}
                             className={`px-4 py-1.5 text-xs font-medium rounded-md transition-all cursor-pointer ${tab === 'next'
-                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                                    : 'text-dark-300 hover:text-cream-100'
+                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                                : 'text-dark-300 hover:text-cream-100'
                                 }`}>
                             <Crosshair size={12} className="inline mr-1.5" />Workout Tips
                         </button>
@@ -588,23 +588,40 @@ function WorkoutTipsContent({ tips, onBack }: {
                 )}
             </div>
 
-            {/* Summary */}
-            <p className="text-cream-200 text-sm leading-relaxed">{tips.summary}</p>
+            {/* Nutrition Context */}
+            {tips.nutrition_context && (
+                <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3.5">
+                    <p className="text-[10px] text-amber-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5 font-semibold">
+                        <Flame size={10} />Nutrition Phase
+                    </p>
+                    <p className="text-cream-200 text-xs leading-relaxed">{tips.nutrition_context}</p>
+                </div>
+            )}
 
             {/* Exercise Tips */}
             {tips.exercise_tips.length > 0 && (
                 <div>
                     <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <Lightbulb size={10} />Tips per exercise
+                        <Dumbbell size={10} />Exercise Breakdown
                     </p>
-                    <div className="space-y-2">
+                    <div className="space-y-2.5">
                         {tips.exercise_tips.map((et, i) => (
-                            <div key={i} className="bg-dark-700/40 rounded-lg border border-dark-500/20 p-3">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <Dumbbell size={12} className="text-dark-300 shrink-0" />
-                                    <span className="text-xs font-medium text-cream-50">{et.name}</span>
+                            <div key={i} className="bg-dark-700/40 rounded-xl border border-dark-500/20 p-3.5 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-semibold text-cream-50">{et.name}</span>
+                                    <span className="text-[10px] text-dark-300 bg-dark-600/60 px-2 py-0.5 rounded-full font-mono">
+                                        {et.sets_reps_done}
+                                    </span>
                                 </div>
-                                <p className="text-cream-200 text-xs leading-relaxed pl-5">{et.tip}</p>
+                                <div className="flex items-start gap-1.5">
+                                    <TrendingUp size={11} className="text-purple-400 shrink-0 mt-0.5" />
+                                    <p className="text-cream-300 text-[11px] leading-relaxed">{et.progression_note}</p>
+                                </div>
+                                <div className="bg-blue-500/8 border border-blue-500/15 rounded-lg p-2.5">
+                                    <p className="text-blue-300 text-[11px] leading-relaxed font-medium">
+                                        → {et.recommendation}
+                                    </p>
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -615,16 +632,21 @@ function WorkoutTipsContent({ tips, onBack }: {
             {tips.new_exercises_to_try.length > 0 && (
                 <div>
                     <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
-                        <Plus size={10} />New exercises to try
+                        <Plus size={10} />Try next time
                     </p>
                     <div className="space-y-2">
                         {tips.new_exercises_to_try.map((ne, i) => (
-                            <div key={i} className="bg-blue-500/5 rounded-lg border border-blue-500/20 p-3">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <Star size={12} className="text-blue-400 shrink-0" />
-                                    <span className="text-xs font-medium text-blue-300">{ne.name}</span>
+                            <div key={i} className="bg-emerald-500/5 rounded-xl border border-emerald-500/20 p-3.5">
+                                <div className="flex items-center justify-between mb-1">
+                                    <div className="flex items-center gap-2">
+                                        <Star size={12} className="text-emerald-400 shrink-0" />
+                                        <span className="text-xs font-semibold text-emerald-300">{ne.name}</span>
+                                    </div>
+                                    <span className="text-[10px] text-dark-300 bg-dark-600/60 px-2 py-0.5 rounded-full font-mono">
+                                        {ne.suggested_sets_reps}
+                                    </span>
                                 </div>
-                                <p className="text-cream-200 text-xs leading-relaxed pl-5">{ne.why}</p>
+                                <p className="text-cream-200 text-[11px] leading-relaxed pl-5">{ne.why}</p>
                             </div>
                         ))}
                     </div>
@@ -633,7 +655,7 @@ function WorkoutTipsContent({ tips, onBack }: {
 
             {/* General advice */}
             {tips.general_advice && (
-                <div className="bg-gold-500/5 border border-gold-500/20 rounded-lg p-3">
+                <div className="bg-gold-500/5 border border-gold-500/20 rounded-xl p-3.5">
                     <p className="text-cream-100 text-xs leading-relaxed italic">💡 {tips.general_advice}</p>
                 </div>
             )}

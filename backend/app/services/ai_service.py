@@ -34,7 +34,8 @@ FALLBACK_SESSION_REVIEW = {
 
 FALLBACK_WORKOUT_TIPS = {
     "workout_title": "Unknown",
-    "summary": "Unable to generate tips right now.",
+    "workout_date": "",
+    "nutrition_context": "Unable to load nutrition context.",
     "exercise_tips": [],
     "new_exercises_to_try": [],
     "general_advice": "",
@@ -422,6 +423,10 @@ def _build_workout_tips_prompt(profile: Optional[dict]) -> str:
     sex = p.get("sex", "")
     height = p.get("body_height_cm")
     current_weight = p.get("current_weight_kg")
+    start_weight = p.get("start_weight_kg")
+    weight_change = p.get("weight_change_per_week_kg")
+    activity = (p.get("activity_degree") or "").replace("_", " ")
+    diet_name = (p.get("diet_name") or "").replace("_", " ")
 
     context_lines: list[str] = [f"The user's name is **{name}**."]
     if sex:
@@ -430,7 +435,15 @@ def _build_workout_tips_prompt(profile: Optional[dict]) -> str:
         context_lines.append(f"Height: {height} cm.")
     if current_weight:
         context_lines.append(f"Current weight: {current_weight} kg.")
+    if start_weight and current_weight and abs(start_weight - current_weight) > 0.5:
+        context_lines.append(f"Start weight: {start_weight} kg (change: {round(current_weight - start_weight, 1)} kg).")
     context_lines.append(f"Goal: **{goal}**.")
+    if weight_change:
+        context_lines.append(f"Target weight change: {weight_change} kg/week.")
+    if activity:
+        context_lines.append(f"Activity level: {activity}.")
+    if diet_name:
+        context_lines.append(f"Diet: {diet_name}.")
 
     user_context = "\n".join(context_lines)
 
@@ -441,33 +454,53 @@ def _build_workout_tips_prompt(profile: Optional[dict]) -> str:
 
 You will receive:
 1. A SELECTED workout that the user wants tips for (marked with "=== SELECTED WORKOUT ===").
-2. The user's recent workout history for context.
+2. The user's recent workout history (up to 20 sessions) for progression context.
+3. Yesterday's nutrition data from Yazio (may be missing).
 
-Your job:
-- Analyze the selected workout in detail.
-- For each exercise, give a short actionable tip (form improvement, rep range suggestion, weight progression idea).
-- Suggest 2-4 NEW exercises the user could try next time to complement or replace weaker exercises. Explain why each is useful.
-- Give a brief overall summary of the workout quality and one general piece of advice.
-- Keep it supportive, warm, and actionable. No generic filler — be specific to what they actually did.
+=== COACHING PHILOSOPHY ===
+Your tips must be SPECIFIC and DATA-DRIVEN, not generic. Focus on:
+
+1. **Rep ranges & set structure**: Analyze what rep ranges the user is currently doing per exercise. 
+   - Are they training in the right rep range for their goal? (Hypertrophy: 8-12, Strength: 3-6, Endurance: 15+)
+   - Should they increase or decrease reps? Add or remove sets?
+   - Be specific: "You did 4×10 at 60kg — try 4×8 at 65kg next time" instead of "increase weight gradually".
+
+2. **Progression based on history**: Compare the selected workout with previous instances of the same exercises across all workouts.
+   - Has weight/reps increased, stagnated, or dropped?
+   - If stagnated: suggest a concrete deload or rep scheme change.
+   - If progressing: say when they could go up again and by how much (e.g. "+2.5kg next session" or "add 1 rep per set first").
+
+3. **Nutrition context**: The user's goal (bulk/cut/maintain) directly affects training advice.
+   - In a caloric deficit (cutting): don't push heavy PR attempts, focus on maintaining strength, moderate volume.
+   - In a surplus (bulking): push progressive overload harder, more volume is sustainable.
+   - At maintenance: balanced approach.
+   - Reference their actual calorie/protein numbers if available.
+
+4. **Recovery & volume**: Based on how often they train similar muscle groups (visible in history), advise on volume.
+
+IMPORTANT: Do NOT give generic exercise form tips. The user knows how to perform the exercises. Focus ONLY on programming: rep ranges, weight progression, volume, and how it ties to their nutrition phase.
 
 You MUST respond with valid JSON matching this exact schema:
 {{
   "workout_title": "<string, name of the selected workout>",
   "workout_date": "<string, date>",
-  "summary": "<string, 2-3 sentences: overall session quality + main improvement area>",
+  "nutrition_context": "<string, 2-3 sentences: how the user's current nutrition phase (surplus/deficit/maintenance) affects this workout's training recommendations. Reference actual numbers if available.>",
   "exercise_tips": [
     {{
       "name": "<string, exercise name>",
-      "tip": "<string, ONE specific actionable tip>"
+      "sets_reps_done": "<string, what they actually did, e.g. '4×10 @ 60kg'>",
+      "progression_note": "<string, comparison to previous sessions: improved / stagnated / first time / declined. Include specific numbers.>",
+      "recommendation": "<string, concrete next-session target. E.g. 'Go to 4×8 @ 65kg' or 'Stay at this weight, aim for 4×12 before increasing' or 'Deload to 50kg × 10 for two weeks, you've been stuck for 3 sessions'>"
     }}
   ],
   "new_exercises_to_try": [
     {{
       "name": "<string, exercise name to try>",
-      "why": "<string, ONE sentence explaining why this is a good addition>"
+      "why": "<string, ONE sentence: why this complements their current program>",
+      "suggested_sets_reps": "<string, e.g. '3×10-12 @ moderate weight'>"
     }}
   ],
-  "general_advice": "<string, one motivational/practical sentence for next time>"
+  "general_advice": "<string, one actionable sentence tying nutrition + training together for their next session>"
 }}
 
 Respond ONLY with the JSON object. No markdown, no explanation."""
@@ -489,13 +522,36 @@ async def generate_workout_tips(
     profile = yazio_data.get("profile") if yazio_data else None
     system_prompt = _build_workout_tips_prompt(profile)
 
-    # Build user message: selected workout highlighted + context
+    # Build user message: selected workout highlighted + context + nutrition
     selected = hevy_data[workout_index]
     parts: list[str] = []
     parts.append("=== SELECTED WORKOUT (analyze this one) ===")
     parts.append(_format_workout(selected))
     parts.append("")
-    parts.append(f"=== RECENT WORKOUT HISTORY ({len(hevy_data)} total, for context) ===")
+
+    # Add nutrition context if available
+    if yazio_data:
+        totals = yazio_data.get("totals", {})
+        goals = yazio_data.get("goals", {})
+        parts.append("=== YESTERDAY'S NUTRITION (Yazio) ===")
+        parts.append(f"Consumed: {totals.get('calories', 0)} kcal | "
+                     f"P: {totals.get('protein', 0)}g | "
+                     f"C: {totals.get('carbs', 0)}g | "
+                     f"F: {totals.get('fat', 0)}g")
+        parts.append(f"Goals:    {goals.get('calories', 0)} kcal | "
+                     f"P: {goals.get('protein', 0)}g | "
+                     f"C: {goals.get('carbs', 0)}g | "
+                     f"F: {goals.get('fat', 0)}g")
+        surplus_deficit = totals.get('calories', 0) - goals.get('calories', 0)
+        if surplus_deficit > 100:
+            parts.append(f"→ Currently in a surplus of ~{surplus_deficit} kcal over goal.")
+        elif surplus_deficit < -100:
+            parts.append(f"→ Currently in a deficit of ~{abs(surplus_deficit)} kcal under goal.")
+        else:
+            parts.append("→ Roughly at calorie goal (maintenance).")
+        parts.append("")
+
+    parts.append(f"=== RECENT WORKOUT HISTORY ({len(hevy_data)} total, for progression context) ===")
     for i, w in enumerate(hevy_data):
         if i == workout_index:
             continue

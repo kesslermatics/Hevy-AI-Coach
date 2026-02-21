@@ -168,18 +168,21 @@ export interface WorkoutListItem {
 
 export interface ExerciseTip {
   name: string;
-  tip: string;
+  sets_reps_done: string;
+  progression_note: string;
+  recommendation: string;
 }
 
 export interface NewExerciseSuggestion {
   name: string;
   why: string;
+  suggested_sets_reps: string;
 }
 
 export interface WorkoutTips {
   workout_title: string;
   workout_date: string;
-  summary: string;
+  nutrition_context: string;
   exercise_tips: ExerciseTip[];
   new_exercises_to_try: NewExerciseSuggestion[];
   general_advice: string;

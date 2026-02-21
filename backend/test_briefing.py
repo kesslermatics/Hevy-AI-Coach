@@ -21,7 +21,6 @@ from app.database import SessionLocal
 from app.models import User
 from app.services.aggregator import gather_user_context
 from app.services.ai_service import generate_daily_briefing
-from app.encryption import decrypt_value
 
 
 async def main():
@@ -149,6 +148,49 @@ async def main():
         print()
         print("📋 Session Review JSON:")
         print(json.dumps(session, indent=2, ensure_ascii=False))
+
+        # Step 4: Workout Tips (for the most recent workout)
+        if hevy and len(hevy) > 0:
+            print()
+            print("═" * 55)
+            print()
+            print("🤖 Calling Gemini for Workout Tips (workout #1)...")
+            from app.services.ai_service import generate_workout_tips
+            tips = await generate_workout_tips(
+                yazio_data=yazio,
+                hevy_data=hevy,
+                workout_index=0,
+            )
+
+            print()
+            print("═" * 55)
+            print("  💡  WORKOUT TIPS")
+            print("═" * 55)
+            print(f"\n  📋 {tips.get('workout_title', '?')} ({tips.get('workout_date', '?')})")
+
+            nc = tips.get("nutrition_context", "")
+            if nc:
+                print(f"\n  🍽️  Nutrition Context:")
+                print(f"     {nc}")
+
+            for et in tips.get("exercise_tips", []):
+                print(f"\n  🏋️  {et.get('name', '?')} — {et.get('sets_reps_done', '?')}")
+                print(f"     📈 {et.get('progression_note', '')}")
+                print(f"     → {et.get('recommendation', '')}")
+
+            for ne in tips.get("new_exercises_to_try", []):
+                print(f"\n  ✨ Try: {ne.get('name', '?')} ({ne.get('suggested_sets_reps', '?')})")
+                print(f"     {ne.get('why', '')}")
+
+            ga = tips.get("general_advice", "")
+            if ga:
+                print(f"\n  💡 {ga}")
+
+            print()
+            print("═" * 55)
+            print()
+            print("📋 Workout Tips JSON:")
+            print(json.dumps(tips, indent=2, ensure_ascii=False))
 
     finally:
         db.close()
