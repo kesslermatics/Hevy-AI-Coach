@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips } from '../api/api';
-import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutListItem, WorkoutTips } from '../api/api';
+import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips, getWeather } from '../api/api';
+import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutListItem, WorkoutTips, WeatherData } from '../api/api';
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
-    Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus
+    Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus, Scale, MapPin
 } from 'lucide-react';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
@@ -38,6 +38,10 @@ export default function Dashboard() {
     const [regenerating, setRegenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Location + weather
+    const [location, setLocation] = useState<{ lat: number; lon: number } | null>(null);
+    const [weather, setWeather] = useState<WeatherData | null>(null);
+
     // Session review modal state
     const [modalOpen, setModalOpen] = useState<'last' | 'next' | null>(null);
     const [sessionReview, setSessionReview] = useState<SessionReviewData | null>(null);
@@ -51,22 +55,42 @@ export default function Dashboard() {
     const [tipsLoading, setTipsLoading] = useState(false);
     const [tipsError, setTipsError] = useState<string | null>(null);
 
-    const fetchBriefing = async () => {
-        setError(null);
-        try {
-            const b = await getTodayBriefing();
-            setBriefing(b);
-        } catch (err: any) {
-            setError(err.message || 'Failed to load briefing');
-        } finally {
-            setLoading(false);
+    // Get user location on mount, then fetch briefing
+    useEffect(() => {
+        let locationResolved = false;
+
+        const loadWithLocation = (loc: { lat: number; lon: number } | null) => {
+            if (locationResolved) return;
+            locationResolved = true;
+            if (loc) {
+                setLocation(loc);
+                getWeather(loc.lat, loc.lon).then(setWeather).catch(() => { });
+            }
+            // Fetch briefing (with or without location)
+            setError(null);
+            getTodayBriefing(loc?.lat, loc?.lon)
+                .then(setBriefing)
+                .catch((err: any) => setError(err.message || 'Failed to load briefing'))
+                .finally(() => setLoading(false));
+        };
+
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => loadWithLocation({ lat: pos.coords.latitude, lon: pos.coords.longitude }),
+                () => loadWithLocation(null),
+                { timeout: 5000, enableHighAccuracy: false }
+            );
+            // Fallback if geolocation is very slow
+            setTimeout(() => loadWithLocation(null), 6000);
+        } else {
+            loadWithLocation(null);
         }
-    };
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     const handleRegenerate = async () => {
         setRegenerating(true); setError(null);
         try {
-            const b = await regenerateBriefing();
+            const b = await regenerateBriefing(location?.lat, location?.lon);
             setBriefing(b);
         } catch (err: any) {
             setError(err.message || 'Failed to regenerate');
@@ -122,7 +146,14 @@ export default function Dashboard() {
         setTipsError(null);
     };
 
-    useEffect(() => { fetchBriefing(); }, []);
+    const retryBriefing = () => {
+        setLoading(true);
+        setError(null);
+        getTodayBriefing(location?.lat, location?.lon)
+            .then(setBriefing)
+            .catch((err: any) => setError(err.message || 'Failed to load briefing'))
+            .finally(() => setLoading(false));
+    };
 
     const data = briefing?.briefing_data;
 
@@ -134,10 +165,18 @@ export default function Dashboard() {
                     <h1 className="text-2xl font-bold text-cream-50">
                         Good morning, <span className="text-gradient-gold">{user?.username}</span>
                     </h1>
-                    <p className="text-dark-300 text-sm mt-1 flex items-center gap-1.5">
-                        <Sunrise size={14} />
-                        {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
-                    </p>
+                    <div className="flex items-center gap-3 mt-1">
+                        <p className="text-dark-300 text-sm flex items-center gap-1.5">
+                            <Sunrise size={14} />
+                            {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                        </p>
+                        {weather && weather.temperature_c != null && (
+                            <p className="text-dark-300 text-sm flex items-center gap-1.5">
+                                <MapPin size={12} />
+                                <span>{weather.emoji} {Math.round(weather.temperature_c)}°C · {weather.condition}</span>
+                            </p>
+                        )}
+                    </div>
                 </div>
                 {briefing && (
                     <button onClick={handleRegenerate} disabled={regenerating}
@@ -161,7 +200,7 @@ export default function Dashboard() {
             {error && !loading && (
                 <div className="card-glass p-6 text-center space-y-3">
                     <p className="text-red-400 text-sm">{error}</p>
-                    <button onClick={fetchBriefing}
+                    <button onClick={retryBriefing}
                         className="btn-gold text-sm px-6 py-2 mx-auto">Try Again</button>
                 </div>
             )}
@@ -169,6 +208,14 @@ export default function Dashboard() {
             {/* Briefing content */}
             {data && !loading && (
                 <>
+                    {/* ─── Weather Note ─────────────────── */}
+                    {data.weather_note && (
+                        <div className="card-glass p-4 flex items-center gap-3">
+                            <span className="text-2xl">{weather?.emoji || '🌤️'}</span>
+                            <p className="text-cream-200 text-sm leading-relaxed">{data.weather_note}</p>
+                        </div>
+                    )}
+
                     {/* ─── Nutrition Review ─────────────────── */}
                     <div className="card-glass p-6">
                         <div className="flex items-center gap-3 mb-4">
@@ -209,6 +256,22 @@ export default function Dashboard() {
                         </div>
                         <p className="text-cream-200 text-sm leading-relaxed">{data.workout_suggestion}</p>
                     </div>
+
+                    {/* ─── Weight Trend ─────────────────────── */}
+                    {data.weight_trend && (
+                        <div className="card-glass p-6">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-purple-500/10 border-purple-500/30 text-purple-400">
+                                    <Scale className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-semibold text-cream-50">Weight Trend</h3>
+                                    <p className="text-xs text-dark-300">Your journey progress</p>
+                                </div>
+                            </div>
+                            <p className="text-cream-200 text-sm leading-relaxed">{data.weight_trend}</p>
+                        </div>
+                    )}
 
                     {/* ─── Session Tiles (clickable) ───────── */}
                     <div className="grid grid-cols-2 gap-4">

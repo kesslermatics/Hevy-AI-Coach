@@ -5,7 +5,7 @@ import logging
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -15,17 +15,18 @@ from app.models import User, MorningBriefing
 from app.schemas import BriefingResponse
 from app.services.aggregator import gather_user_context
 from app.services.ai_service import generate_daily_briefing, generate_session_review, generate_workout_tips
+from app.services.weather_service import fetch_weather
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/briefing", tags=["Briefing"])
 
 
-async def _generate_and_save(user: User, db: Session) -> MorningBriefing:
+async def _generate_and_save(
+    user: User, db: Session, weather_data: Optional[dict] = None
+) -> MorningBriefing:
     """
     Run the full pipeline: gather data → call AI → persist.
-
-    Raises HTTPException on total failure.
     """
     today = date.today()
 
@@ -36,6 +37,7 @@ async def _generate_and_save(user: User, db: Session) -> MorningBriefing:
     briefing_data = await generate_daily_briefing(
         yazio_data=context["yazio"],
         hevy_data=context["hevy"],
+        weather_data=weather_data,
     )
 
     # 3) Persist
@@ -50,7 +52,6 @@ async def _generate_and_save(user: User, db: Session) -> MorningBriefing:
         db.refresh(briefing)
     except Exception:
         db.rollback()
-        # Could be a unique constraint race – try fetching again
         existing = (
             db.query(MorningBriefing)
             .filter(MorningBriefing.user_id == user.id, MorningBriefing.date == today)
@@ -71,16 +72,16 @@ async def _generate_and_save(user: User, db: Session) -> MorningBriefing:
 async def get_todays_briefing(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None),
 ):
     """
     Return today's morning briefing.
-
-    - If one already exists in the DB → return it immediately.
-    - If not → generate on-demand, save, and return.
+    If one already exists in the DB → return it immediately.
+    If not → generate on-demand (optionally with weather), save, and return.
     """
     today = date.today()
 
-    # Try cached first
     existing = (
         db.query(MorningBriefing)
         .filter(MorningBriefing.user_id == current_user.id, MorningBriefing.date == today)
@@ -89,29 +90,53 @@ async def get_todays_briefing(
     if existing:
         return existing
 
-    # On-demand generation
-    return await _generate_and_save(current_user, db)
+    # Fetch weather if location provided
+    weather_data = None
+    if lat is not None and lon is not None:
+        weather_data = await fetch_weather(lat, lon)
+
+    return await _generate_and_save(current_user, db, weather_data)
 
 
 @router.post("/regenerate", response_model=BriefingResponse)
 async def regenerate_briefing(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
+    lat: Optional[float] = Query(None),
+    lon: Optional[float] = Query(None),
 ):
     """
     Force-regenerate today's briefing (deletes the old one if present).
-    Useful when the user has updated their tracking after the 4 AM cron ran.
     """
     today = date.today()
 
-    # Delete existing
     db.query(MorningBriefing).filter(
         MorningBriefing.user_id == current_user.id,
         MorningBriefing.date == today,
     ).delete()
     db.commit()
 
-    return await _generate_and_save(current_user, db)
+    weather_data = None
+    if lat is not None and lon is not None:
+        weather_data = await fetch_weather(lat, lon)
+
+    return await _generate_and_save(current_user, db, weather_data)
+
+
+@router.get("/weather")
+async def get_weather(
+    lat: float = Query(...),
+    lon: float = Query(...),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Return current weather data for the user's location.
+    Used by the frontend header for real-time display.
+    """
+    data = await fetch_weather(lat, lon)
+    if not data:
+        return {"temperature_c": None, "condition": "Unknown", "emoji": "🌡️"}
+    return data
 
 
 @router.post("/session-review")

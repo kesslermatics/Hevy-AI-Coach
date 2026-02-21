@@ -108,6 +108,16 @@ async def main():
         print(f"\n  🏋️  Workout Suggestion:")
         print(f"     {briefing.get('workout_suggestion', 'N/A')}")
 
+        wt = briefing.get("weight_trend", "")
+        if wt:
+            print(f"\n  ⚖️  Weight Trend:")
+            print(f"     {wt}")
+
+        wn = briefing.get("weather_note", "")
+        if wn:
+            print(f"\n  🌤️  Weather Note:")
+            print(f"     {wn}")
+
         print(f"\n  🎯 Daily Mission:")
         print(f"     {briefing.get('daily_mission', 'N/A')}")
 

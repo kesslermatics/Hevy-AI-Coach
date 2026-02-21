@@ -24,7 +24,9 @@ FALLBACK_BRIEFING = {
         "fat": "Unable to load fat data.",
     },
     "workout_suggestion": "Unable to generate workout suggestion — please check your Hevy connection.",
+    "weight_trend": "Unable to load weight data.",
     "daily_mission": "Stay consistent and keep tracking your progress! 💪",
+    "weather_note": "",
 }
 
 FALLBACK_SESSION_REVIEW = {
@@ -101,6 +103,7 @@ def _build_system_prompt(profile: Optional[dict]) -> str:
 You will receive:
 1. Yesterday's nutrition data from Yazio (may be partial or missing entirely).
 2. The last few completed workouts from Hevy (exercises, sets, weights).
+3. Current weather data (may be missing).
 
 Your job:
 - Address the user by their first name.
@@ -115,6 +118,17 @@ Your job:
 
 For each macro in nutrition_review, ALWAYS include the actual number and the goal number (e.g. "2100 of 2500 kcal — solid, right on track!").
 
+**weight_trend**: Based on the user's current weight, start weight, goal, and target weight change per week, write a short, encouraging summary of their weight journey. Mention current weight, how far they've come from their start weight, how far to their goal, and whether the pace is good. Be specific with numbers. If the user is bulking, frame weight gain positively. If cutting, frame weight loss positively. If no weight data is available, say "No weight data available yet — start tracking to see your progress!"
+
+**daily_mission**: Give ONE very specific, concrete, actionable micro-task for today. NOT generic motivation. Examples:
+- "Eat a banana 30 min before your workout for quick carbs."
+- "Focus on 3-second eccentrics on every bench press rep today."
+- "Add one extra set of lateral raises at the end of your session."
+- "Drink a protein shake within 30 min after training."
+The mission should relate to either today's workout or yesterday's nutrition gaps.
+
+**weather_note**: If weather data is provided, write ONE short sentence connecting the weather to the workout day. E.g. "22°C and sunny — perfect for a run after your session!" or "Rainy and 5°C — cozy gym day, no excuses!" or "34°C outside — stay hydrated, bring extra water to the gym." If no weather data, leave this as an empty string.
+
 You MUST respond with valid JSON matching this exact schema:
 {{
   "nutrition_review": {{
@@ -124,7 +138,9 @@ You MUST respond with valid JSON matching this exact schema:
     "fat": "<string, ONE short sentence WITH actual/goal grams>"
   }},
   "workout_suggestion": "<string, 2-3 sentences suggesting today's training focus>",
-  "daily_mission": "<string, one motivational sentence>"
+  "weight_trend": "<string, 2-3 sentences about weight progress with actual numbers>",
+  "daily_mission": "<string, ONE specific actionable micro-task for today>",
+  "weather_note": "<string, ONE short weather-related sentence, or empty string if no weather data>"
 }}
 
 Respond ONLY with the JSON object. No markdown, no explanation."""
@@ -202,12 +218,13 @@ def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -
 async def generate_daily_briefing(
     yazio_data: Optional[dict],
     hevy_data: Optional[list],
+    weather_data: Optional[dict] = None,
 ) -> dict:
     """
     Call Google Gemini to generate a morning briefing.
 
-    Returns a dict with keys: readiness_score, nutrition_review,
-    workout_suggestion, daily_mission.
+    Returns a dict with keys: nutrition_review, workout_suggestion,
+    weight_trend, daily_mission, weather_note.
     Falls back to FALLBACK_BRIEFING if anything goes wrong.
     """
     client = genai.Client(api_key=settings.gemini_api_key)
@@ -216,6 +233,15 @@ async def generate_daily_briefing(
     profile = yazio_data.get("profile") if yazio_data else None
     system_prompt = _build_system_prompt(profile)
     user_message = _build_user_message(yazio_data, hevy_data)
+
+    # Append weather data if available
+    if weather_data:
+        user_message += (
+            f"\n\n=== CURRENT WEATHER ===\n"
+            f"Temperature: {weather_data.get('temperature_c', '?')}°C\n"
+            f"Condition: {weather_data.get('condition', 'Unknown')}\n"
+            f"Wind: {weather_data.get('windspeed_kmh', '?')} km/h\n"
+        )
 
     try:
         response = await client.aio.models.generate_content(
@@ -257,6 +283,12 @@ async def generate_daily_briefing(
             for k in ("calories", "protein", "carbs", "fat"):
                 if k not in nr:
                     nr[k] = ""
+
+        # Ensure new fields exist
+        if "weight_trend" not in parsed:
+            parsed["weight_trend"] = ""
+        if "weather_note" not in parsed:
+            parsed["weather_note"] = ""
 
         return parsed
 

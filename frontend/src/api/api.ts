@@ -132,7 +132,9 @@ export interface NextSession {
 export interface BriefingData {
   nutrition_review: NutritionReview;
   workout_suggestion: string;
+  weight_trend: string;
   daily_mission: string;
+  weather_note: string;
 }
 
 export interface SessionReviewData {
@@ -147,14 +149,31 @@ export interface Briefing {
   created_at: string;
 }
 
-export const getTodayBriefing = () =>
-  apiRequest<Briefing>('/api/briefing/today');
+export const getTodayBriefing = (lat?: number, lon?: number) => {
+  const params = lat != null && lon != null ? `?lat=${lat}&lon=${lon}` : '';
+  return apiRequest<Briefing>(`/api/briefing/today${params}`);
+};
 
-export const regenerateBriefing = () =>
-  apiRequest<Briefing>('/api/briefing/regenerate', { method: 'POST' });
+export const regenerateBriefing = (lat?: number, lon?: number) => {
+  const params = lat != null && lon != null ? `?lat=${lat}&lon=${lon}` : '';
+  return apiRequest<Briefing>(`/api/briefing/regenerate${params}`, { method: 'POST' });
+};
 
 export const getSessionReview = () =>
   apiRequest<SessionReviewData>('/api/briefing/session-review', { method: 'POST' });
+
+/* ── Weather ────────────────────────────────────────────── */
+
+export interface WeatherData {
+  temperature_c: number | null;
+  windspeed_kmh: number | null;
+  condition: string;
+  emoji: string;
+  is_day: boolean;
+}
+
+export const getWeather = (lat: number, lon: number) =>
+  apiRequest<WeatherData>(`/api/briefing/weather?lat=${lat}&lon=${lon}`);
 
 /* ── Workout picker + tips ──────────────────────────────── */
 
