@@ -27,6 +27,7 @@ FALLBACK_BRIEFING = {
     "weight_trend": "Unable to load weight data.",
     "daily_mission": "Stay consistent and keep tracking your progress! 💪",
     "weather_note": "",
+    "muscle_recovery": {},
 }
 
 FALLBACK_SESSION_REVIEW = {
@@ -129,6 +130,14 @@ The mission should relate to either today's workout or yesterday's nutrition gap
 
 **weather_note**: If weather data is provided, write 1-2 full sentences describing today's weather naturally. Include the current temperature, the expected low and high for the day, and the conditions. Then optionally connect it to the workout. Example: "Right now it's 5°C with light rain — expect lows of 2°C and highs of 8°C today. Perfect excuse to hit the gym instead of running outside!" If no weather data, leave this as an empty string.
 
+**muscle_recovery**: Based on the recent workout history, estimate the recovery percentage (0-100) for each major muscle group. 0 = just trained / completely fatigued, 100 = fully recovered and ready to train. Use these exact keys: "chest", "back", "shoulders", "biceps", "triceps", "forearms", "abs", "quads", "hamstrings", "glutes", "calves". Consider:
+- A muscle group trained today or yesterday: 0-30%
+- Trained 2 days ago: 30-60%
+- Trained 3 days ago: 60-80%
+- Trained 4+ days ago or never: 80-100%
+- Compound movements affect multiple groups (e.g. bench press → chest, triceps, shoulders)
+If no workout data is available, set all values to 100.
+
 You MUST respond with valid JSON matching this exact schema:
 {{
   "nutrition_review": {{
@@ -140,7 +149,20 @@ You MUST respond with valid JSON matching this exact schema:
   "workout_suggestion": "<string, 2-3 sentences suggesting today's training focus>",
   "weight_trend": "<string, 2-3 sentences about weight progress with actual numbers>",
   "daily_mission": "<string, ONE specific actionable micro-task for today>",
-  "weather_note": "<string, 1-2 sentences with current temp, daily low/high, conditions, and optional workout connection — or empty string if no weather data>"
+  "weather_note": "<string, 1-2 sentences with current temp, daily low/high, conditions, and optional workout connection — or empty string if no weather data>",
+  "muscle_recovery": {{
+    "chest": <int 0-100>,
+    "back": <int 0-100>,
+    "shoulders": <int 0-100>,
+    "biceps": <int 0-100>,
+    "triceps": <int 0-100>,
+    "forearms": <int 0-100>,
+    "abs": <int 0-100>,
+    "quads": <int 0-100>,
+    "hamstrings": <int 0-100>,
+    "glutes": <int 0-100>,
+    "calves": <int 0-100>
+  }}
 }}
 
 Respond ONLY with the JSON object. No markdown, no explanation."""
@@ -253,7 +275,7 @@ async def generate_daily_briefing(
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.7,
-                max_output_tokens=2048,
+                max_output_tokens=3072,
                 response_mime_type="application/json",
             ),
         )
@@ -292,6 +314,8 @@ async def generate_daily_briefing(
             parsed["weight_trend"] = ""
         if "weather_note" not in parsed:
             parsed["weather_note"] = ""
+        if "muscle_recovery" not in parsed:
+            parsed["muscle_recovery"] = {}
 
         return parsed
 

@@ -16,6 +16,9 @@ from app.schemas import BriefingResponse
 from app.services.aggregator import gather_user_context
 from app.services.ai_service import generate_daily_briefing, generate_session_review, generate_workout_tips
 from app.services.weather_service import fetch_weather
+from app.services.hevy_service import fetch_workout_dates
+from app.services.yazio_service import fetch_nutrition_dates
+from app.encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
 
@@ -213,3 +216,38 @@ async def get_workout_tips(
     )
 
     return result
+
+
+@router.get("/activity-heatmap")
+async def get_activity_heatmap(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Return workout dates + nutrition tracking dates for a GitHub-style activity heatmap.
+    Returns {workouts: [{date, title, duration_min}], nutrition: [{date, calories, protein}]}.
+    """
+    workout_dates: list[dict] = []
+    nutrition_dates: list[dict] = []
+
+    # Fetch workout dates from Hevy
+    if current_user.hevy_api_key:
+        try:
+            api_key = decrypt_value(current_user.hevy_api_key)
+            workout_dates = await fetch_workout_dates(api_key, max_pages=20)
+        except Exception as exc:
+            logger.error("Failed to fetch workout dates: %s", exc)
+
+    # Fetch nutrition tracking dates from Yazio
+    if current_user.yazio_email and current_user.yazio_password:
+        try:
+            email = decrypt_value(current_user.yazio_email)
+            password = decrypt_value(current_user.yazio_password)
+            nutrition_dates = await fetch_nutrition_dates(email, password, days=180)
+        except Exception as exc:
+            logger.error("Failed to fetch nutrition dates: %s", exc)
+
+    return {
+        "workouts": workout_dates,
+        "nutrition": nutrition_dates,
+    }

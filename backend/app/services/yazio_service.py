@@ -209,3 +209,61 @@ async def fetch_yazio_summary(email: str, password: str, target_date: Optional[d
         }
 
     return result
+
+
+async def fetch_nutrition_dates(
+    email: str, password: str, days: int = 180
+) -> list[dict]:
+    """
+    Check which dates have tracked nutrition over the last `days` days.
+    Returns a list of {date: "YYYY-MM-DD", calories: float, protein: float}.
+    Used for the GitHub-style activity heatmap.
+    """
+    import asyncio
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        token = await _yazio_login(client, email, password)
+        if not token:
+            return []
+
+        tracked: list[dict] = []
+        today = date.today()
+
+        # Fetch in batches to avoid hammering the API
+        # Check each day — but limit concurrency
+        semaphore = asyncio.Semaphore(5)
+
+        async def check_date(d: date) -> Optional[dict]:
+            async with semaphore:
+                try:
+                    resp = await client.get(
+                        f"{YAZIO_BASE_URL}/user/widgets/daily-summary",
+                        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                        params={"date": d.isoformat()},
+                    )
+                    if resp.status_code != 200:
+                        return None
+                    data = resp.json()
+                    meals = data.get("meals", {})
+                    total_cal = 0.0
+                    total_protein = 0.0
+                    for key in MEAL_KEYS:
+                        nutrients = meals.get(key, {}).get("nutrients", {})
+                        total_cal += nutrients.get("energy.energy", 0)
+                        total_protein += nutrients.get("nutrient.protein", 0)
+                    # Only count as tracked if any calories were logged
+                    if total_cal > 0:
+                        return {
+                            "date": d.isoformat(),
+                            "calories": round(total_cal, 1),
+                            "protein": round(total_protein, 1),
+                        }
+                    return None
+                except Exception:
+                    return None
+
+        dates_to_check = [today - timedelta(days=i) for i in range(days)]
+        results = await asyncio.gather(*[check_date(d) for d in dates_to_check])
+
+        tracked = [r for r in results if r is not None]
+        return tracked

@@ -5,8 +5,10 @@ import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutList
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
-    Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus, Scale, MapPin
+    Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus, Scale, MapPin, Activity
 } from 'lucide-react';
+import MuscleHeatmap from './MuscleHeatmap';
+import ActivityHeatmap from './ActivityHeatmap';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
 
@@ -257,6 +259,22 @@ export default function Dashboard() {
                         <p className="text-cream-200 text-sm leading-relaxed">{data.workout_suggestion}</p>
                     </div>
 
+                    {/* ─── Muscle Recovery Heatmap ─────────── */}
+                    {data.muscle_recovery && Object.keys(data.muscle_recovery).length > 0 && (
+                        <div className="card-glass p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-rose-500/10 border-rose-500/30 text-rose-400">
+                                    <Activity className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-semibold text-cream-50">Muscle Recovery</h3>
+                                    <p className="text-xs text-dark-300">Based on your recent workouts</p>
+                                </div>
+                            </div>
+                            <MuscleHeatmap recovery={data.muscle_recovery} />
+                        </div>
+                    )}
+
                     {/* ─── Weight Trend ─────────────────────── */}
                     {data.weight_trend && (
                         <div className="card-glass p-6">
@@ -304,6 +322,9 @@ export default function Dashboard() {
                             "{data.daily_mission}"
                         </p>
                     </div>
+
+                    {/* ─── Activity Heatmap ────────────────── */}
+                    <ActivityHeatmap />
                 </>
             )}
 

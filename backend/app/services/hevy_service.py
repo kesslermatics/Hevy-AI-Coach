@@ -5,6 +5,7 @@ Uses the official Hevy v1 REST API.
 Docs: https://api.hevyapp.com/docs
 """
 import logging
+from datetime import datetime
 from typing import Optional
 
 import httpx
@@ -116,3 +117,67 @@ def _simplify_workout(w: dict) -> dict:
         "duration_min": duration_min,
         "exercises": exercises,
     }
+
+
+async def fetch_workout_dates(api_key: str, max_pages: int = 10) -> list[dict]:
+    """
+    Fetch all workout dates (lightweight – no exercise details).
+    Returns a list of {date: "YYYY-MM-DD", title: str, duration_min: int|None}.
+    Used for the GitHub-style activity heatmap.
+    """
+    headers = {"api-key": api_key, "Accept": "application/json"}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            all_dates: list[dict] = []
+            page = 1
+
+            while page <= max_pages:
+                resp = await client.get(
+                    f"{HEVY_BASE_URL}/workouts",
+                    headers=headers,
+                    params={"page": page, "pageSize": 10},
+                )
+
+                if resp.status_code != 200:
+                    break
+
+                data = resp.json()
+                raw_workouts = data.get("workouts", data.get("data", []))
+
+                if not raw_workouts:
+                    break
+
+                for w in raw_workouts:
+                    start_time = w.get("start_time", "")
+                    workout_date = start_time[:10] if start_time else None
+                    if workout_date:
+                        # Calculate duration
+                        end_time = w.get("end_time", "")
+                        duration_min = None
+                        if start_time and end_time:
+                            try:
+                                fmt = "%Y-%m-%dT%H:%M:%SZ"
+                                s = start_time.replace("+00:00", "Z").rstrip("Z") + "Z"
+                                e = end_time.replace("+00:00", "Z").rstrip("Z") + "Z"
+                                dt_s = datetime.strptime(s, fmt)
+                                dt_e = datetime.strptime(e, fmt)
+                                duration_min = round((dt_e - dt_s).total_seconds() / 60)
+                            except Exception:
+                                pass
+
+                        all_dates.append({
+                            "date": workout_date,
+                            "title": w.get("title", "Workout"),
+                            "duration_min": duration_min,
+                        })
+
+                if len(raw_workouts) < 10:
+                    break
+                page += 1
+
+            return all_dates
+
+    except Exception as exc:
+        logger.error("Hevy API error (workout dates): %s", exc)
+        return []

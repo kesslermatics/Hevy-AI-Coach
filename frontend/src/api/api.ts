@@ -135,6 +135,7 @@ export interface BriefingData {
   weight_trend: string;
   daily_mission: string;
   weather_note: string;
+  muscle_recovery: Record<string, number>;
 }
 
 export interface SessionReviewData {
@@ -218,3 +219,25 @@ export const getWorkoutTips = (workout_index: number) =>
     method: 'POST',
     body: JSON.stringify({ workout_index }),
   });
+
+/* ── Activity Heatmap ───────────────────────────────────── */
+
+export interface WorkoutDate {
+  date: string;
+  title: string;
+  duration_min: number | null;
+}
+
+export interface NutritionDate {
+  date: string;
+  calories: number;
+  protein: number;
+}
+
+export interface ActivityHeatmapData {
+  workouts: WorkoutDate[];
+  nutrition: NutritionDate[];
+}
+
+export const getActivityHeatmap = () =>
+  apiRequest<ActivityHeatmapData>('/api/briefing/activity-heatmap');
