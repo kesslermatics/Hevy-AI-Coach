@@ -37,6 +37,15 @@ async def _generate_and_save(
     # 1) Aggregate Yazio + Hevy data
     context = await gather_user_context(user)
 
+    # Save first_name from Yazio profile if available
+    yazio = context.get("yazio")
+    if yazio and yazio.get("profile"):
+        fn = yazio["profile"].get("first_name", "").strip()
+        if fn and fn != (user.first_name or ""):
+            user.first_name = fn
+            db.commit()
+            db.refresh(user)
+
     # 2) Call Gemini
     briefing_data = await generate_daily_briefing(
         yazio_data=context["yazio"],

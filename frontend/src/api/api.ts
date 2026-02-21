@@ -63,6 +63,7 @@ export interface UserInfo {
   has_yazio: boolean;
   current_goal: string | null;
   target_weight: number | null;
+  first_name: string | null;
   language: 'de' | 'en';
 }
 

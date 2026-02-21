@@ -30,6 +30,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         has_yazio=current_user.yazio_email is not None,
         current_goal=current_user.current_goal,
         target_weight=current_user.target_weight,
+        first_name=current_user.first_name,
         language=current_user.language or "de",
     )
 

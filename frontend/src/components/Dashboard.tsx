@@ -179,7 +179,7 @@ export default function Dashboard() {
             <div className="flex items-start justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-cream-50">
-                        {t('dashboard.goodMorning')} <span className="text-gradient-gold">{user?.username}</span>
+                        {t('dashboard.goodMorning')} <span className="text-gradient-gold">{user?.first_name || user?.username}</span>
                     </h1>
                     <div className="flex items-center gap-3 mt-1">
                         <p className="text-dark-300 text-sm flex items-center gap-1.5">

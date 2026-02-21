@@ -29,6 +29,7 @@ class UserResponse(BaseModel):
     has_yazio: bool = False
     current_goal: Optional[str] = None
     target_weight: Optional[float] = None
+    first_name: Optional[str] = None
     language: str = "de"
     
     class Config:
