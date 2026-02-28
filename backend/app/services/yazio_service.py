@@ -119,10 +119,12 @@ def _parse_summary(raw: dict) -> dict:
     for key in MEAL_KEYS:
         nutrients = meals.get(key, {}).get("nutrients", {})
 
-        # Log the actual nutrient keys once so we can debug missing fields
-        if not _logged_keys and nutrients:
-            logger.info("Yazio nutrient keys for meal '%s': %s", key, list(nutrients.keys()))
-            _logged_keys = True
+        # Log ALL nutrient keys + values for every meal so we can find the right keys
+        if nutrients:
+            logger.info("Yazio RAW nutrients for '%s': %s", key,
+                        {k: round(v, 2) if isinstance(v, (int, float)) else v for k, v in nutrients.items()})
+            if not _logged_keys:
+                _logged_keys = True
 
         cal  = nutrients.get("energy.energy", 0)
         prot = nutrients.get("nutrient.protein", 0)
