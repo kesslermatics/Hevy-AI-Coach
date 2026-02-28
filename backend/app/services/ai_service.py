@@ -329,7 +329,7 @@ async def generate_daily_briefing(
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.7,
-                max_output_tokens=3072,
+                max_output_tokens=8192,
                 response_mime_type="application/json",
             ),
         )
