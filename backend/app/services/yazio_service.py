@@ -58,6 +58,53 @@ async def _fetch_daily_summary(client: httpx.AsyncClient, token: str, target_dat
         return None
 
 
+async def _fetch_consumed_items(client: httpx.AsyncClient, token: str, target_date: str) -> Optional[list]:
+    """
+    Fetch individual consumed food items for a date.
+    These contain full nutrient breakdowns (sugar, fiber, saturated fat, sodium, etc.)
+    unlike the daily-summary widget which only has the 4 basics.
+    """
+    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
+
+    # Try multiple possible endpoints for consumed items
+    endpoints = [
+        f"{YAZIO_BASE_URL}/user/consumed",
+        f"{YAZIO_BASE_URL}/user/tracker/consumed",
+        f"{YAZIO_BASE_URL}/user/diary/consumed",
+        f"{YAZIO_BASE_URL}/user/food-diary",
+        f"{YAZIO_BASE_URL}/user/diary",
+    ]
+
+    for endpoint in endpoints:
+        try:
+            resp = await client.get(endpoint, headers=headers, params={"date": target_date})
+            logger.info("Yazio probe %s → HTTP %s (size: %d bytes)",
+                        endpoint.split("/v15/")[-1], resp.status_code, len(resp.content))
+            if resp.status_code == 200:
+                data = resp.json()
+                # Log a sample of the response structure
+                if isinstance(data, list) and len(data) > 0:
+                    sample = data[0]
+                    logger.info("Yazio consumed item sample keys: %s", list(sample.keys()) if isinstance(sample, dict) else type(sample))
+                    if isinstance(sample, dict) and "nutrients" in sample:
+                        logger.info("Yazio consumed item nutrient keys: %s", list(sample["nutrients"].keys()))
+                    return data
+                elif isinstance(data, dict):
+                    logger.info("Yazio consumed response keys: %s", list(data.keys()))
+                    # Could be wrapped in a container
+                    items = data.get("items") or data.get("consumed") or data.get("entries") or data.get("data")
+                    if isinstance(items, list) and len(items) > 0:
+                        sample = items[0]
+                        logger.info("Yazio consumed nested item keys: %s", list(sample.keys()) if isinstance(sample, dict) else type(sample))
+                        if isinstance(sample, dict) and "nutrients" in sample:
+                            logger.info("Yazio consumed nested nutrient keys: %s", list(sample["nutrients"].keys()))
+                        return items
+        except Exception as exc:
+            logger.debug("Yazio probe %s failed: %s", endpoint, exc)
+
+    return None
+
+
 async def _fetch_user_profile(client: httpx.AsyncClient, token: str) -> Optional[dict]:
     """Fetch the full Yazio user profile (/v15/user)."""
     try:
@@ -210,6 +257,9 @@ async def fetch_yazio_summary(email: str, password: str, target_date: Optional[d
 
         # Fetch full user profile for name, height, goal, diet etc.
         raw_profile = await _fetch_user_profile(client, token)
+
+        # Probe consumed-items endpoints for detailed nutrients (sugar, fiber, etc.)
+        consumed_items = await _fetch_consumed_items(client, token, date_str)
 
     result = _parse_summary(raw)
 
