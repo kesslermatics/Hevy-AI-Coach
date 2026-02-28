@@ -96,7 +96,7 @@ export default function Dashboard() {
     const [uniqueWorkoutNames, setUniqueWorkoutNames] = useState<string[]>([]);
 
     // Chat state
-    const [chatOpen, setChatOpen] = useState(false);
+    const [chatOpen, setChatOpen] = useState(true);
     const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
     const [chatInput, setChatInput] = useState('');
     const [chatLoading, setChatLoading] = useState(false);
@@ -654,7 +654,7 @@ export default function Dashboard() {
                         {chatOpen && (
                             <div className="border-t border-dark-500/30">
                                 {/* Messages */}
-                                <div className="p-4 space-y-3 max-h-80 overflow-y-auto" id="chat-messages">
+                                <div className="p-4 space-y-3 max-h-[60vh] overflow-y-auto" id="chat-messages">
                                     {chatMessages.length === 0 && (
                                         <div className="text-center py-6">
                                             <p className="text-xs text-dark-300 italic">{t('chat.welcome')}</p>

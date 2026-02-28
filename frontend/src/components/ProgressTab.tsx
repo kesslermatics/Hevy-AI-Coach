@@ -9,12 +9,6 @@ import {
 } from 'lucide-react';
 import { useLanguage } from '../i18n';
 
-/* ── All distinct muscle groups for the filter ─────── */
-const MUSCLE_GROUPS = [
-    'Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps',
-    'Quadriceps', 'Hamstrings', 'Glutes', 'Calves', 'Core', 'Forearms',
-];
-
 export default function ProgressTab() {
     const { t, lang } = useLanguage();
 

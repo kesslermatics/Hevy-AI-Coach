@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import { getWeeklyReport, getMonthlyReport } from '../api/api';
 import type { WeeklyReport, MonthlyReport, ReportTraining, ReportNutrition, ReportWeight } from '../api/api';
 import {
-    Loader2, ChevronLeft, ChevronRight, Dumbbell, Flame, Beef,
-    Scale, BarChart3, TrendingUp, TrendingDown, Minus, Calendar,
+    Loader2, ChevronLeft, ChevronRight, Dumbbell, Flame,
+    Scale, BarChart3, TrendingUp, TrendingDown, Minus,
 } from 'lucide-react';
 import { useLanguage } from '../i18n';
 

@@ -691,25 +691,35 @@ async def get_streaks(
     db: Session = Depends(get_db),
 ):
     """Weekly streaks for training and nutrition."""
-    workout_dates: list[str] = []
-    nutrition_dates: list[str] = []
+    import asyncio
 
-    if current_user.hevy_api_key:
+    async def _fetch_workout_dates() -> list[str]:
+        if not current_user.hevy_api_key:
+            return []
         try:
             api_key = decrypt_value(current_user.hevy_api_key)
-            raw = await fetch_workout_dates(api_key, max_pages=20)
-            workout_dates = [w["date"] for w in raw if w.get("date")]
+            raw = await fetch_workout_dates(api_key, max_pages=10)
+            return [w["date"] for w in raw if w.get("date")]
         except Exception as exc:
             logger.error("Failed to fetch workout dates for streaks: %s", exc)
+            return []
 
-    if current_user.yazio_email and current_user.yazio_password:
+    async def _fetch_nutrition_dates() -> list[str]:
+        if not current_user.yazio_email or not current_user.yazio_password:
+            return []
         try:
             email = decrypt_value(current_user.yazio_email)
             password = decrypt_value(current_user.yazio_password)
-            raw = await fetch_nutrition_dates(email, password, days=365)
-            nutrition_dates = [n["date"] for n in raw if n.get("date")]
+            raw = await fetch_nutrition_dates(email, password, days=90)
+            return [n["date"] for n in raw if n.get("date")]
         except Exception as exc:
             logger.error("Failed to fetch nutrition dates for streaks: %s", exc)
+            return []
+
+    workout_dates, nutrition_dates = await asyncio.gather(
+        _fetch_workout_dates(),
+        _fetch_nutrition_dates(),
+    )
 
     result = compute_weekly_streaks(workout_dates, nutrition_dates)
     return result
