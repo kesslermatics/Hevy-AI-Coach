@@ -226,10 +226,28 @@ async def get_session_review(
     # Fallback: generate live (for users who just signed up or have no reviews yet)
     context = await gather_user_context(current_user)
 
+    # Still try to include coaching memory for fallback generation
+    previous_review_list = []
+    if context.get("hevy") and len(context["hevy"]) > 0:
+        latest_workout_name = context["hevy"][0].get("title", "")
+        if latest_workout_name:
+            prev_reviews = (
+                db.query(WorkoutReview)
+                .filter(
+                    WorkoutReview.user_id == current_user.id,
+                    WorkoutReview.workout_name == latest_workout_name,
+                )
+                .order_by(WorkoutReview.workout_date.desc())
+                .limit(3)
+                .all()
+            )
+            previous_review_list = [r.review_data for r in prev_reviews if r.review_data]
+
     result = await generate_session_review(
         yazio_data=context["yazio"],
         hevy_data=context["hevy"],
         language=current_user.language or "de",
+        previous_reviews=previous_review_list,
     )
 
     return result
@@ -465,9 +483,28 @@ async def get_weight_history(
     """
     Return the user's weight history (last N days).
     Data is collected from Yazio on each briefing generation.
+    If no entry for today exists, tries to seed from Yazio on the fly.
     """
     from datetime import timedelta
-    cutoff = date.today() - timedelta(days=days)
+    today_date = date.today()
+    cutoff = today_date - timedelta(days=days)
+
+    # Try to seed today's weight if missing
+    today_entry = (
+        db.query(WeightEntry)
+        .filter(WeightEntry.user_id == current_user.id, WeightEntry.date == today_date)
+        .first()
+    )
+    if not today_entry and current_user.yazio_email and current_user.yazio_password:
+        try:
+            from app.services.yazio_service import fetch_yazio_summary
+            email = decrypt_value(current_user.yazio_email)
+            password = decrypt_value(current_user.yazio_password)
+            yazio_data = await fetch_yazio_summary(email, password)
+            _log_weight_entry(current_user.id, yazio_data, db)
+        except Exception as exc:
+            logger.debug("Could not seed weight from Yazio: %s", exc)
+
     entries = (
         db.query(WeightEntry)
         .filter(
