@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips, getWeather } from '../api/api';
-import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutListItem, WorkoutTips, WeatherData } from '../api/api';
+import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips, getWeather, getWorkoutReviews, getUnreadCount, markReviewRead, triggerReviewCheck, saveTrainingPlan, sendChatMessage } from '../api/api';
+import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutListItem, WorkoutTips, WeatherData, WorkoutReviewItem, ChatMessage } from '../api/api';
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
     Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus, Scale, MapPin, Activity,
-    Zap, ChevronRight, Award
+    Zap, ChevronRight, Award, Bell, CheckCircle2, MessageSquare, Send,
+    ChevronDown, ChevronUp, Edit3, Check, ListChecks
 } from 'lucide-react';
 import MuscleHeatmap from './MuscleHeatmap';
 import ActivityHeatmap from './ActivityHeatmap';
@@ -71,6 +72,27 @@ export default function Dashboard() {
     const [tipsLoading, setTipsLoading] = useState(false);
     const [tipsError, setTipsError] = useState<string | null>(null);
 
+    // Pre-generated workout reviews (from scheduler)
+    const [workoutReviews, setWorkoutReviews] = useState<WorkoutReviewItem[] | null>(null);
+    const [reviewsLoading, setReviewsLoading] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [selectedReview, setSelectedReview] = useState<WorkoutReviewItem | null>(null);
+    const [syncing, setSyncing] = useState(false);
+
+    // Training plan state
+    const [trainingPlan, setTrainingPlan] = useState<string[]>(user?.training_plan || []);
+    const [editingPlan, setEditingPlan] = useState(false);
+    const [planDraft, setPlanDraft] = useState<string[]>([]);
+    const [planSaving, setPlanSaving] = useState(false);
+    const [uniqueWorkoutNames, setUniqueWorkoutNames] = useState<string[]>([]);
+
+    // Chat state
+    const [chatOpen, setChatOpen] = useState(false);
+    const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+    const [chatInput, setChatInput] = useState('');
+    const [chatLoading, setChatLoading] = useState(false);
+    const chatEndRef = useRef<HTMLDivElement>(null);
+
     // Get user location on mount, then fetch briefing
     useEffect(() => {
         let locationResolved = false;
@@ -103,6 +125,21 @@ export default function Dashboard() {
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Fetch unread review count on mount
+    useEffect(() => {
+        getUnreadCount().then(d => setUnreadCount(d.unread_count)).catch(() => { });
+    }, []);
+
+    // Sync training plan from user
+    useEffect(() => {
+        if (user?.training_plan) setTrainingPlan(user.training_plan);
+    }, [user?.training_plan]);
+
+    // Auto-scroll chat to bottom
+    useEffect(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [chatMessages, chatLoading]);
+
     const handleRegenerate = async () => {
         setRegenerating(true); setError(null);
         try {
@@ -129,15 +166,29 @@ export default function Dashboard() {
                 setSessionLoading(false);
             }
         }
-        if (tab === 'next' && !workoutList) {
-            setWorkoutsLoading(true);
-            try {
-                const list = await getWorkoutList();
-                setWorkoutList(list);
-            } catch {
-                // silently fail — empty list shown
-            } finally {
-                setWorkoutsLoading(false);
+        if (tab === 'next') {
+            // Fetch pre-generated reviews from DB
+            if (!workoutReviews) {
+                setReviewsLoading(true);
+                try {
+                    const reviews = await getWorkoutReviews();
+                    setWorkoutReviews(reviews);
+                } catch {
+                    // Fallback to old workout list
+                }
+                setReviewsLoading(false);
+            }
+            // Also fetch old workout list as fallback
+            if (!workoutList) {
+                setWorkoutsLoading(true);
+                try {
+                    const list = await getWorkoutList();
+                    setWorkoutList(list);
+                } catch {
+                    // silently fail — empty list shown
+                } finally {
+                    setWorkoutsLoading(false);
+                }
             }
         }
     };
@@ -159,7 +210,85 @@ export default function Dashboard() {
     const closeModal = () => {
         setModalOpen(null);
         setSelectedWorkoutTips(null);
+        setSelectedReview(null);
         setTipsError(null);
+    };
+
+    const handleSelectReview = async (review: WorkoutReviewItem) => {
+        setSelectedReview(review);
+        if (review.tips_data) {
+            setSelectedWorkoutTips(review.tips_data);
+        }
+        // Mark as read
+        if (!review.is_read) {
+            review.is_read = true;
+            setUnreadCount(prev => Math.max(0, prev - 1));
+            markReviewRead(review.id).catch(() => { });
+        }
+    };
+
+    const handleSyncReviews = async () => {
+        setSyncing(true);
+        try {
+            const result = await triggerReviewCheck();
+            // Refresh reviews list and unread count
+            const [reviews, unread] = await Promise.all([
+                getWorkoutReviews(),
+                getUnreadCount(),
+            ]);
+            setWorkoutReviews(reviews);
+            setUnreadCount(unread.unread_count);
+            // If we're in the modal, it will show the updated list
+        } catch {
+            // silently fail
+        } finally {
+            setSyncing(false);
+        }
+    };
+
+    const handleEditPlan = async () => {
+        setPlanDraft([...trainingPlan]);
+        setEditingPlan(true);
+        // Fetch unique workout names from reviews or workout list
+        if (uniqueWorkoutNames.length === 0) {
+            try {
+                const list = await getWorkoutList();
+                const names = [...new Set(list.map(w => w.title))];
+                setUniqueWorkoutNames(names);
+            } catch { /* ignore */ }
+        }
+    };
+
+    const handleSavePlan = async () => {
+        setPlanSaving(true);
+        try {
+            const result = await saveTrainingPlan(planDraft);
+            setTrainingPlan(result.training_plan);
+            setEditingPlan(false);
+        } catch { /* ignore */ }
+        setPlanSaving(false);
+    };
+
+    const togglePlanWorkout = (name: string) => {
+        setPlanDraft(prev =>
+            prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+        );
+    };
+
+    const handleChatSend = async () => {
+        const msg = chatInput.trim();
+        if (!msg || chatLoading) return;
+        setChatInput('');
+        const userMsg: ChatMessage = { role: 'user', content: msg };
+        setChatMessages(prev => [...prev, userMsg]);
+        setChatLoading(true);
+        try {
+            const res = await sendChatMessage(msg, [...chatMessages, userMsg].slice(-20));
+            setChatMessages(prev => [...prev, { role: 'assistant', content: res.response }]);
+        } catch {
+            setChatMessages(prev => [...prev, { role: 'assistant', content: 'Sorry, something went wrong. Try again.' }]);
+        }
+        setChatLoading(false);
     };
 
     const retryBriefing = () => {
@@ -317,13 +446,92 @@ export default function Dashboard() {
                         </button>
 
                         <button onClick={() => openSessionModal('next')}
-                            className="card-glass p-5 text-left hover:border-blue-500/40 transition-all duration-200 group cursor-pointer">
+                            className="card-glass p-5 text-left hover:border-blue-500/40 transition-all duration-200 group cursor-pointer relative">
+                            {unreadCount > 0 && (
+                                <span className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 text-white text-[10px] font-bold shadow-lg shadow-rose-500/30 animate-pulse z-10">
+                                    <Bell size={10} />
+                                    {unreadCount} {t('dashboard.newReviews')}
+                                </span>
+                            )}
                             <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                                 <Crosshair className="w-5 h-5 text-blue-400" />
                             </div>
                             <h3 className="text-sm font-semibold text-cream-50 mb-1">{t('dashboard.workoutTips')}</h3>
                             <p className="text-xs text-dark-300">{t('dashboard.workoutTipsDesc')}</p>
                         </button>
+                    </div>
+
+                    {/* Sync button */}
+                    <div className="flex justify-end -mt-2">
+                        <button
+                            onClick={handleSyncReviews}
+                            disabled={syncing}
+                            className="flex items-center gap-1.5 text-xs text-dark-300 hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                            <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
+                            {syncing ? t('dashboard.syncingReviews') : t('dashboard.syncReviews')}
+                        </button>
+                    </div>
+
+                    {/* ─── Training Plan ─────────────────── */}
+                    <div className="card-glass p-5">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
+                                    <ListChecks className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-semibold text-cream-50">{t('plan.title')}</h3>
+                                    <p className="text-xs text-dark-300">{t('plan.subtitle')}</p>
+                                </div>
+                            </div>
+                            {!editingPlan && (
+                                <button onClick={handleEditPlan}
+                                    className="flex items-center gap-1 text-xs text-dark-300 hover:text-emerald-400 transition-colors cursor-pointer">
+                                    <Edit3 size={12} />
+                                    {trainingPlan.length > 0 ? t('plan.editPlan') : t('plan.selectWorkouts')}
+                                </button>
+                            )}
+                        </div>
+
+                        {editingPlan ? (
+                            <div className="space-y-3">
+                                <div className="flex flex-wrap gap-2">
+                                    {uniqueWorkoutNames.length === 0 ? (
+                                        <p className="text-xs text-dark-400">{t('plan.noWorkouts')}</p>
+                                    ) : uniqueWorkoutNames.map(name => (
+                                        <button key={name} onClick={() => togglePlanWorkout(name)}
+                                            className={`text-xs px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${planDraft.includes(name)
+                                                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                                                    : 'bg-dark-700/40 border-dark-500/30 text-dark-300 hover:border-dark-400/40'
+                                                }`}>
+                                            {planDraft.includes(name) && <Check size={10} className="inline mr-1" />}
+                                            {name}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2 justify-end">
+                                    <button onClick={() => setEditingPlan(false)}
+                                        className="text-xs text-dark-300 hover:text-cream-100 px-3 py-1.5 cursor-pointer">
+                                        {t('plan.cancel')}
+                                    </button>
+                                    <button onClick={handleSavePlan} disabled={planSaving}
+                                        className="text-xs bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/30 px-4 py-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-50">
+                                        {planSaving ? t('plan.saving') : t('plan.save')}
+                                    </button>
+                                </div>
+                            </div>
+                        ) : trainingPlan.length > 0 ? (
+                            <div className="flex flex-wrap gap-2">
+                                {trainingPlan.map(name => (
+                                    <span key={name} className="text-xs px-3 py-1.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+                                        {name}
+                                    </span>
+                                ))}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-dark-400 italic">{t('plan.empty')}</p>
+                        )}
                     </div>
 
                     {/* ─── Daily Mission ───────────────────── */}
@@ -339,6 +547,83 @@ export default function Dashboard() {
 
                     {/* ─── Activity Heatmap ────────────────── */}
                     <ActivityHeatmap />
+
+                    {/* ─── Coach Chat ──────────────────────── */}
+                    <div className="card-glass overflow-hidden">
+                        {/* Chat header — always visible, toggles open/close */}
+                        <button
+                            onClick={() => setChatOpen(!chatOpen)}
+                            className="w-full flex items-center justify-between p-5 cursor-pointer hover:bg-dark-700/20 transition-colors"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-gradient-to-br from-gold-500/15 to-amber-500/10 border-gold-500/30 text-gold-400">
+                                    <MessageSquare className="w-5 h-5" />
+                                </div>
+                                <div className="text-left">
+                                    <h3 className="text-sm font-semibold text-cream-50">{t('chat.title')}</h3>
+                                    <p className="text-xs text-dark-300">{t('chat.subtitle')}</p>
+                                </div>
+                            </div>
+                            {chatOpen ? <ChevronUp size={16} className="text-dark-300" /> : <ChevronDown size={16} className="text-dark-300" />}
+                        </button>
+
+                        {/* Chat body — collapsible */}
+                        {chatOpen && (
+                            <div className="border-t border-dark-500/30">
+                                {/* Messages */}
+                                <div className="p-4 space-y-3 max-h-80 overflow-y-auto" id="chat-messages">
+                                    {chatMessages.length === 0 && (
+                                        <div className="text-center py-6">
+                                            <p className="text-xs text-dark-300 italic">{t('chat.welcome')}</p>
+                                        </div>
+                                    )}
+                                    {chatMessages.map((msg, i) => (
+                                        <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed ${msg.role === 'user'
+                                                    ? 'bg-blue-500/20 border border-blue-500/30 text-cream-100 rounded-br-md'
+                                                    : 'bg-dark-700/60 border border-dark-500/30 text-cream-200 rounded-bl-md'
+                                                }`}>
+                                                <div className="whitespace-pre-wrap">{msg.content}</div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                    {chatLoading && (
+                                        <div className="flex justify-start">
+                                            <div className="bg-dark-700/60 border border-dark-500/30 rounded-2xl rounded-bl-md px-4 py-2.5">
+                                                <div className="flex items-center gap-2 text-xs text-dark-300">
+                                                    <Loader2 size={12} className="animate-spin" />
+                                                    {t('chat.thinking')}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                    <div ref={chatEndRef} />
+                                </div>
+
+                                {/* Input */}
+                                <div className="p-3 border-t border-dark-500/30">
+                                    <form onSubmit={(e) => { e.preventDefault(); handleChatSend(); }}
+                                        className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={chatInput}
+                                            onChange={(e) => setChatInput(e.target.value)}
+                                            placeholder={t('chat.placeholder')}
+                                            className="flex-1 bg-dark-700/50 border border-dark-500/30 rounded-xl px-4 py-2.5 text-xs text-cream-100 placeholder:text-dark-400 focus:border-gold-500/40 focus:outline-none transition-colors"
+                                            disabled={chatLoading}
+                                        />
+                                        <button
+                                            type="submit"
+                                            disabled={chatLoading || !chatInput.trim()}
+                                            className="bg-gradient-to-r from-gold-500/20 to-amber-500/15 border border-gold-500/30 text-gold-400 hover:text-gold-300 rounded-xl px-3 py-2.5 transition-all cursor-pointer disabled:opacity-40"
+                                        >
+                                            <Send size={14} />
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 </>
             )}
 
@@ -346,22 +631,27 @@ export default function Dashboard() {
             {modalOpen && (
                 <SessionModal
                     tab={modalOpen}
-                    onTabChange={(t) => { setSelectedWorkoutTips(null); setTipsError(null); openSessionModal(t); }}
+                    onTabChange={(t) => { setSelectedWorkoutTips(null); setSelectedReview(null); setTipsError(null); openSessionModal(t); }}
                     onClose={closeModal}
                     sessionData={sessionReview}
                     sessionLoading={sessionLoading}
                     sessionError={sessionError}
                     workoutList={workoutList}
                     workoutsLoading={workoutsLoading}
+                    workoutReviews={workoutReviews}
+                    reviewsLoading={reviewsLoading}
+                    selectedReview={selectedReview}
                     selectedWorkoutTips={selectedWorkoutTips}
                     tipsLoading={tipsLoading}
                     tipsError={tipsError}
                     onSelectWorkout={handleSelectWorkout}
-                    onBackToList={() => { setSelectedWorkoutTips(null); setTipsError(null); }}
+                    onSelectReview={handleSelectReview}
+                    onBackToList={() => { setSelectedWorkoutTips(null); setSelectedReview(null); setTipsError(null); }}
                     onRetrySession={() => {
                         setSessionReview(null);
                         openSessionModal('last');
                     }}
+                    trainingPlan={trainingPlan}
                 />
             )}
         </div>
@@ -373,8 +663,9 @@ export default function Dashboard() {
    ═══════════════════════════════════════════════════════ */
 
 function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, sessionError,
-    workoutList, workoutsLoading, selectedWorkoutTips, tipsLoading, tipsError,
-    onSelectWorkout, onBackToList, onRetrySession }: {
+    workoutList, workoutsLoading, workoutReviews, reviewsLoading, selectedReview,
+    selectedWorkoutTips, tipsLoading, tipsError,
+    onSelectWorkout, onSelectReview, onBackToList, onRetrySession, trainingPlan }: {
         tab: 'last' | 'next';
         onTabChange: (t: 'last' | 'next') => void;
         onClose: () => void;
@@ -383,12 +674,17 @@ function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, 
         sessionError: string | null;
         workoutList: WorkoutListItem[] | null;
         workoutsLoading: boolean;
+        workoutReviews: WorkoutReviewItem[] | null;
+        reviewsLoading: boolean;
+        selectedReview: WorkoutReviewItem | null;
         selectedWorkoutTips: WorkoutTips | null;
         tipsLoading: boolean;
         tipsError: string | null;
         onSelectWorkout: (index: number) => void;
+        onSelectReview: (review: WorkoutReviewItem) => void;
         onBackToList: () => void;
         onRetrySession: () => void;
+        trainingPlan: string[];
     }) {
     const { t } = useLanguage();
     return (
@@ -440,15 +736,29 @@ function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, 
                     )}
                     {tab === 'next' && (
                         <>
-                            {selectedWorkoutTips ? (
-                                <WorkoutTipsContent tips={selectedWorkoutTips} onBack={onBackToList} />
-                            ) : tipsLoading ? (
-                                <ModalLoader text={t('modal.generatingTips')} />
-                            ) : tipsError ? (
-                                <ModalError message={tipsError} onRetry={onBackToList} />
-                            ) : workoutsLoading ? (
+                            {selectedReview || selectedWorkoutTips ? (
+                                /* Show tips for a selected review */
+                                selectedWorkoutTips ? (
+                                    <WorkoutTipsContent tips={selectedWorkoutTips} onBack={onBackToList} />
+                                ) : tipsLoading ? (
+                                    <ModalLoader text={t('modal.generatingTips')} />
+                                ) : tipsError ? (
+                                    <ModalError message={tipsError} onRetry={onBackToList} />
+                                ) : null
+                            ) : reviewsLoading || workoutsLoading ? (
                                 <ModalLoader text={t('modal.loadingWorkouts')} />
+                            ) : workoutReviews && workoutReviews.length > 0 ? (
+                                /* Show pre-generated reviews list — filtered by training plan if set */
+                                <ReviewPicker
+                                    reviews={trainingPlan.length > 0
+                                        ? workoutReviews.filter(r => trainingPlan.includes(r.workout_name))
+                                        : workoutReviews}
+                                    allReviews={workoutReviews}
+                                    trainingPlan={trainingPlan}
+                                    onSelect={onSelectReview}
+                                />
                             ) : (
+                                /* Fallback to old workout list */
                                 <WorkoutPicker workouts={workoutList || []} onSelect={onSelectWorkout} />
                             )}
                         </>
@@ -793,6 +1103,103 @@ function E1rmChart({ history, currentE1rm, isPr }: {
     );
 }
 
+/* ── Review Picker (pre-generated reviews from scheduler) ── */
+
+function ReviewPicker({ reviews, allReviews, trainingPlan, onSelect }: {
+    reviews: WorkoutReviewItem[];
+    allReviews: WorkoutReviewItem[];
+    trainingPlan: string[];
+    onSelect: (review: WorkoutReviewItem) => void;
+}) {
+    const { t, lang } = useLanguage();
+    const [showAll, setShowAll] = useState(false);
+
+    const displayReviews = showAll ? allReviews : reviews;
+    const hasFilter = trainingPlan.length > 0 && allReviews.length !== reviews.length;
+
+    if (displayReviews.length === 0) {
+        return <p className="text-dark-300 text-sm text-center py-8">{t('picker.noReviews')}</p>;
+    }
+
+    return (
+        <div className="space-y-3">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="text-lg font-semibold text-cream-50">{t('picker.title')}</h3>
+                    <p className="text-xs text-dark-300 mt-0.5">{t('picker.subtitle')}</p>
+                </div>
+                {hasFilter && (
+                    <button onClick={() => setShowAll(!showAll)}
+                        className="text-[10px] text-dark-300 hover:text-cream-100 transition-colors cursor-pointer px-2 py-1 rounded-lg bg-dark-700/40 border border-dark-500/20">
+                        {showAll ? t('picker.showPlanOnly') : t('picker.showAll')}
+                    </button>
+                )}
+            </div>
+            <div className="space-y-2">
+                {displayReviews.map((r) => {
+                    // Extract exercise names from review data
+                    const exercises: string[] = [];
+                    const ls = r.review_data?.last_session;
+                    if (ls && typeof ls === 'object' && 'exercises' in ls) {
+                        (ls as any).exercises?.forEach((ex: any) => {
+                            if (ex.name) exercises.push(ex.name);
+                        });
+                    }
+                    // Count PRs
+                    const prCount = (ls as any)?.exercises?.filter((ex: any) => ex.is_pr)?.length || 0;
+
+                    return (
+                        <button key={r.id} onClick={() => onSelect(r)}
+                            className={`w-full text-left backdrop-blur-sm rounded-xl border p-4 transition-all cursor-pointer group ${!r.is_read
+                                    ? 'bg-blue-500/10 border-blue-500/30 hover:border-blue-400/50 shadow-lg shadow-blue-500/5'
+                                    : 'bg-dark-700/40 hover:bg-dark-700/60 border-dark-500/30 hover:border-dark-400/30'
+                                }`}>
+                            <div className="flex items-center justify-between mb-1.5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-sm font-medium text-cream-50 group-hover:text-blue-300 transition-colors truncate">
+                                        {r.workout_name}
+                                    </span>
+                                    {!r.is_read && (
+                                        <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 text-[9px] font-bold text-white uppercase tracking-wider">
+                                            {t('picker.new')}
+                                        </span>
+                                    )}
+                                    {prCount > 0 && (
+                                        <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300">
+                                            🔥 {prCount} PR{prCount > 1 ? 's' : ''}
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-2 text-[11px] text-dark-400 shrink-0">
+                                    {r.has_tips && (
+                                        <span className="flex items-center gap-1 text-emerald-400">
+                                            <CheckCircle2 size={10} />
+                                            <span>{t('picker.reviewed')}</span>
+                                        </span>
+                                    )}
+                                    <span>{formatSessionDate(r.workout_date, lang).split('•')[0].trim()}</span>
+                                </div>
+                            </div>
+                            {exercises.length > 0 && (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {exercises.slice(0, 5).map((name, i) => (
+                                        <span key={i} className="text-[10px] text-dark-300 bg-dark-600/50 px-2 py-0.5 rounded-full">
+                                            {name}
+                                        </span>
+                                    ))}
+                                    {exercises.length > 5 && (
+                                        <span className="text-[10px] text-dark-400 px-2 py-0.5">+{exercises.length - 5}</span>
+                                    )}
+                                </div>
+                            )}
+                        </button>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 /* ── Workout Picker (list of workouts to choose from) ── */
 
 function WorkoutPicker({ workouts, onSelect }: {
@@ -861,39 +1268,56 @@ function WorkoutTipsContent({ tips, onBack }: {
                 )}
             </div>
 
-            {/* Nutrition Context */}
+            {/* Nutrition Context — redesigned as a card */}
             {tips.nutrition_context && (
-                <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-3.5">
-                    <p className="text-[10px] text-amber-400 uppercase tracking-wider mb-1.5 flex items-center gap-1.5 font-semibold">
-                        <Flame size={10} />{t('tips.nutritionPhase')}
-                    </p>
+                <div className="bg-gradient-to-br from-amber-500/8 to-orange-500/5 border border-amber-500/20 rounded-xl p-4">
+                    <div className="flex items-center gap-2 mb-2">
+                        <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+                            <Flame size={14} className="text-amber-400" />
+                        </div>
+                        <p className="text-xs text-amber-400 uppercase tracking-wider font-semibold">{t('tips.nutritionPhase')}</p>
+                    </div>
                     <p className="text-cream-200 text-xs leading-relaxed">{tips.nutrition_context}</p>
                 </div>
             )}
 
-            {/* Exercise Tips */}
+            {/* Exercise Tips — cleaner card layout */}
             {tips.exercise_tips.length > 0 && (
                 <div>
-                    <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5 font-semibold">
                         <Dumbbell size={10} />{t('tips.exerciseBreakdown')}
                     </p>
-                    <div className="space-y-2.5">
+                    <div className="space-y-3">
                         {tips.exercise_tips.map((et, i) => (
-                            <div key={i} className="bg-dark-700/40 rounded-xl border border-dark-500/20 p-3.5 space-y-2">
+                            <div key={i} className="bg-dark-700/40 rounded-xl border border-dark-500/20 p-4 space-y-2.5">
+                                {/* Exercise header */}
                                 <div className="flex items-center justify-between">
-                                    <span className="text-xs font-semibold text-cream-50">{et.name}</span>
-                                    <span className="text-[10px] text-dark-300 bg-dark-600/60 px-2 py-0.5 rounded-full font-mono">
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-md bg-purple-500/15 border border-purple-500/30 flex items-center justify-center">
+                                            <Dumbbell size={10} className="text-purple-400" />
+                                        </div>
+                                        <span className="text-sm font-semibold text-cream-50">{et.name}</span>
+                                    </div>
+                                    <span className="text-[10px] text-dark-300 bg-dark-600/60 px-2.5 py-1 rounded-lg font-mono border border-dark-500/20">
                                         {et.sets_reps_done}
                                     </span>
                                 </div>
-                                <div className="flex items-start gap-1.5">
-                                    <TrendingUp size={11} className="text-purple-400 shrink-0 mt-0.5" />
+
+                                {/* Progression note */}
+                                <div className="flex items-start gap-2 bg-dark-600/30 rounded-lg p-2.5">
+                                    <TrendingUp size={12} className="text-purple-400 shrink-0 mt-0.5" />
                                     <p className="text-cream-300 text-[11px] leading-relaxed">{et.progression_note}</p>
                                 </div>
-                                <div className="bg-blue-500/8 border border-blue-500/15 rounded-lg p-2.5">
-                                    <p className="text-blue-300 text-[11px] leading-relaxed font-medium">
-                                        → {et.recommendation}
-                                    </p>
+
+                                {/* Recommendation — action card */}
+                                <div className="bg-gradient-to-r from-blue-500/8 to-indigo-500/5 border border-blue-500/20 rounded-lg p-3">
+                                    <div className="flex items-start gap-2">
+                                        <Target size={12} className="text-blue-400 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="text-[9px] text-blue-400 font-bold uppercase tracking-wider mb-1">Empfehlung</p>
+                                            <p className="text-blue-200 text-xs font-medium leading-relaxed">{et.recommendation}</p>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -904,22 +1328,22 @@ function WorkoutTipsContent({ tips, onBack }: {
             {/* New exercises to try */}
             {tips.new_exercises_to_try.length > 0 && (
                 <div>
-                    <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                    <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5 font-semibold">
                         <Plus size={10} />{t('tips.tryNextTime')}
                     </p>
                     <div className="space-y-2">
                         {tips.new_exercises_to_try.map((ne, i) => (
-                            <div key={i} className="bg-emerald-500/5 rounded-xl border border-emerald-500/20 p-3.5">
-                                <div className="flex items-center justify-between mb-1">
+                            <div key={i} className="bg-gradient-to-br from-emerald-500/8 to-teal-500/5 rounded-xl border border-emerald-500/20 p-4">
+                                <div className="flex items-center justify-between mb-1.5">
                                     <div className="flex items-center gap-2">
-                                        <Star size={12} className="text-emerald-400 shrink-0" />
-                                        <span className="text-xs font-semibold text-emerald-300">{ne.name}</span>
+                                        <Star size={14} className="text-emerald-400 shrink-0" />
+                                        <span className="text-sm font-semibold text-emerald-300">{ne.name}</span>
                                     </div>
-                                    <span className="text-[10px] text-dark-300 bg-dark-600/60 px-2 py-0.5 rounded-full font-mono">
+                                    <span className="text-[10px] text-dark-300 bg-dark-600/60 px-2.5 py-1 rounded-lg font-mono border border-dark-500/20">
                                         {ne.suggested_sets_reps}
                                     </span>
                                 </div>
-                                <p className="text-cream-200 text-[11px] leading-relaxed pl-5">{ne.why}</p>
+                                <p className="text-cream-200 text-[11px] leading-relaxed pl-6">{ne.why}</p>
                             </div>
                         ))}
                     </div>
@@ -928,8 +1352,11 @@ function WorkoutTipsContent({ tips, onBack }: {
 
             {/* General advice */}
             {tips.general_advice && (
-                <div className="bg-gold-500/5 border border-gold-500/20 rounded-xl p-3.5">
-                    <p className="text-cream-100 text-xs leading-relaxed italic">💡 {tips.general_advice}</p>
+                <div className="bg-gradient-to-r from-gold-500/8 to-amber-500/5 border border-gold-500/20 rounded-xl p-4">
+                    <div className="flex items-start gap-2.5">
+                        <MessageSquare size={14} className="text-gold-400 shrink-0 mt-0.5" />
+                        <p className="text-cream-100 text-xs leading-relaxed italic">{tips.general_advice}</p>
+                    </div>
                 </div>
             )}
         </div>

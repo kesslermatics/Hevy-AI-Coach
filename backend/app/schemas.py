@@ -31,6 +31,7 @@ class UserResponse(BaseModel):
     target_weight: Optional[float] = None
     first_name: Optional[str] = None
     language: str = "de"
+    training_plan: Optional[list[str]] = None
     
     class Config:
         from_attributes = True
@@ -125,6 +126,20 @@ class LanguageResponse(BaseModel):
     """Schema for language update response."""
     message: str
     language: str
+
+
+# ============ Training Plan Schemas ============
+
+class TrainingPlanUpdate(BaseModel):
+    """Schema for updating the user's training plan (list of workout names)."""
+    workout_names: list[str] = Field(..., min_length=0, max_length=20,
+                                      description="List of workout names that form the current plan")
+
+
+class TrainingPlanResponse(BaseModel):
+    """Schema for training plan update response."""
+    message: str
+    training_plan: list[str]
 
 
 # ============ Briefing Schemas ============

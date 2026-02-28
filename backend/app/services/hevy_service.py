@@ -111,6 +111,7 @@ def _simplify_workout(w: dict) -> dict:
             pass
 
     return {
+        "id": w.get("id", ""),
         "title": w.get("title", "Workout"),
         "start_time": start,
         "end_time": end,

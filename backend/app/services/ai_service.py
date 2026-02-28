@@ -407,6 +407,14 @@ For each exercise, check if the current session set a new record compared to ALL
 Your feedback MUST explain WHY performance changed, not just observe it.
 Always use a supportive, motivating coach tone. Never say "declined" or "stagnated" — reframe negatively:
 
+=== COACHING MEMORY ===
+If "YOUR PREVIOUS COACHING" data is provided, you MUST reference it actively:
+- Compare the user's current performance with the targets YOU set last time.
+- If they hit or exceeded your target: celebrate it! ("Letzte Woche hab ich dir 65kg × 8 als Ziel gesetzt — du hast 67.5kg × 8 geschafft! Beast mode!")
+- If they fell short: be understanding and diagnose why (nutrition? fatigue?). ("Ich hatte dir 70kg als Ziel gesetzt, du bist bei 65kg geblieben — schau dir mal dein Protein an, 120g ist zu wenig für dein Gewicht.")
+- If they ignored your advice entirely: gently nudge them. ("Hey, ich hatte dir empfohlen die Pause zwischen den Sätzen zu verlängern — probier das nächstes Mal aus!")
+- This creates a continuous coaching relationship, not just one-off analysis.
+
 - If performance DROPPED: frame it as temporary and explain the cause. E.g.:
   "Du bist auf 12kg runter — das ist kein Muskelverlust, sondern reine leere Glykogenspeicher! Du warst 265g unter deinem Carb-Ziel. Iss deine Carbs heute und du packst nächste Woche wieder 15kg drauf!"
   
@@ -487,16 +495,22 @@ async def generate_session_review(
     yazio_data: Optional[dict],
     hevy_data: Optional[list],
     language: str = "de",
+    previous_reviews: Optional[list[dict]] = None,
 ) -> dict:
     """
     Call Gemini to generate a detailed session review + next session suggestion.
-    This is called on-demand when the user opens the session review modal.
+    When previous_reviews is provided (up to 3), Gemini receives its own past coaching
+    outputs for the same workout name, enabling deep continuity ("Coach Memory").
     """
     client = genai.Client(api_key=settings.gemini_api_key)
 
     profile = yazio_data.get("profile") if yazio_data else None
     system_prompt = _build_session_review_prompt(profile, lang=language)
     user_message = _build_user_message(yazio_data, hevy_data)  # Include nutrition for causality
+
+    # ── Coach Memory: append previous reviews for continuity (up to 3) ──
+    if previous_reviews:
+        user_message += _format_coaching_memory(previous_reviews, memory_type="session_review")
 
     try:
         response = await client.aio.models.generate_content(
@@ -604,6 +618,13 @@ You will receive:
 === COACHING PHILOSOPHY ===
 Your tips must be SPECIFIC and DATA-DRIVEN, not generic. Focus on:
 
+0. **Coaching Memory / Continuity**: If "YOUR PREVIOUS COACHING" data is provided at the end of the message, you MUST actively reference your own past tips:
+   - Did the user follow your recommendation? (e.g. you said "Go to 4×8 @ 65kg" — did they?)
+   - Praise compliance: "Letzte Woche hab ich dir 65kg empfohlen und du hast's gemacht — stark!"
+   - Note non-compliance gently: "Ich hatte dir 4×8 empfohlen, du hast wieder 4×10 gemacht — versuch nächstes Mal wirklich die Reps zu senken und das Gewicht zu erhöhen."
+   - Adjust your NEW recommendation based on whether they followed the old one or not.
+   - This creates a continuous coaching relationship, not one-off tips.
+
 1. **Rep ranges & set structure**: Analyze what rep ranges the user is currently doing per exercise. 
    - Are they training in the right rep range for their goal? (Hypertrophy: 8-12, Strength: 3-6, Endurance: 15+)
    - Should they increase or decrease reps? Add or remove sets?
@@ -656,9 +677,12 @@ async def generate_workout_tips(
     hevy_data: Optional[list],
     workout_index: int,
     language: str = "de",
+    previous_tips_list: Optional[list[dict]] = None,
 ) -> dict:
     """
     Call Gemini to generate tips for a specific selected workout.
+    When previous_tips_list is provided (up to 3), Gemini receives its own past coaching
+    outputs for the same workout name, enabling deep continuity ("Coach Memory").
     """
     if not hevy_data or workout_index >= len(hevy_data):
         return FALLBACK_WORKOUT_TIPS
@@ -706,6 +730,10 @@ async def generate_workout_tips(
 
     user_message = "\n".join(parts)
 
+    # ── Coach Memory: append previous tips for continuity (up to 3) ──
+    if previous_tips_list:
+        user_message += _format_coaching_memory(previous_tips_list, memory_type="workout_tips")
+
     try:
         response = await client.aio.models.generate_content(
             model="gemini-3-flash-preview",
@@ -744,6 +772,45 @@ async def generate_workout_tips(
         return FALLBACK_WORKOUT_TIPS
 
 
+def _format_coaching_memory(previous_data_list: list[dict], memory_type: str = "session_review") -> str:
+    """
+    Format up to 3 previous AI coaching outputs as context for the next session.
+    This gives Gemini deep 'memory' of its coaching history for the same workout type.
+    Most recent is listed first.
+    """
+    count = len(previous_data_list)
+    parts: list[str] = [f"\n\n=== YOUR PREVIOUS COACHING FOR THIS WORKOUT TYPE ({count} session{'s' if count != 1 else ''}) ==="]
+    parts.append("(This is what YOU told the user in their last sessions of this workout type. "
+                 "Reference it! Track multi-session trends. Praise if they followed your advice, "
+                 "remind them if they didn't. Be specific — mention exercises and numbers.)\n")
+
+    for idx, previous_data in enumerate(previous_data_list):
+        label = "Most recent" if idx == 0 else f"{idx + 1} sessions ago"
+        parts.append(f"--- {label} ---")
+
+        if memory_type == "session_review":
+            ls = previous_data.get("last_session")
+            if isinstance(ls, dict):
+                parts.append(f"Workout: {ls.get('title', '?')} on {ls.get('date', '?')}")
+                parts.append(f"Your feedback: {ls.get('overall_feedback', '')}")
+                for ex in ls.get("exercises", []):
+                    parts.append(f"  • {ex.get('name', '?')}: best={ex.get('best_set', '?')}, "
+                                 f"e1rm={ex.get('estimated_1rm', '?')}kg, "
+                                 f"you said: \"{ex.get('feedback', '')}\" "
+                                 f"target you set: \"{ex.get('next_target', '')}\"")
+        elif memory_type == "workout_tips":
+            parts.append(f"Tips for: {previous_data.get('workout_title', '?')} "
+                         f"on {previous_data.get('workout_date', '?')}")
+            for et in previous_data.get("exercise_tips", []):
+                parts.append(f"  • {et.get('name', '?')}: did {et.get('sets_reps_done', '?')}, "
+                             f"your recommendation was: \"{et.get('recommendation', '')}\"")
+            if previous_data.get("general_advice"):
+                parts.append(f"  General advice you gave: \"{previous_data['general_advice']}\"")
+        parts.append("")
+
+    return "\n".join(parts)
+
+
 def _format_workout(w: dict) -> str:
     """Format a single workout dict into a readable string for the AI."""
     dur = f" ({w['duration_min']} min)" if w.get("duration_min") else ""
@@ -763,3 +830,163 @@ def _format_workout(w: dict) -> str:
         muscle = f" [{ex.get('muscle_group')}]" if ex.get("muscle_group") else ""
         lines.append(f"  • {ex.get('title', '?')}{muscle}: {sets_str}")
     return "\n".join(lines)
+
+
+# ════════════════════════════════════════════════════════
+#  AI CHAT — conversational coaching assistant
+# ════════════════════════════════════════════════════════
+
+def _build_chat_system_prompt(
+    profile: Optional[dict],
+    training_plan: Optional[list[str]],
+    lang: str = "de",
+) -> str:
+    """Build the system prompt for the conversational Coach Chat."""
+    p = profile or {}
+    name = " ".join(filter(None, [p.get("first_name"), p.get("last_name")])) or "Athlete"
+    goal = (p.get("goal") or "general fitness").replace("_", " ")
+    sex = p.get("sex", "")
+    height = p.get("body_height_cm")
+    current_weight = p.get("current_weight_kg")
+    activity = (p.get("activity_degree") or "").replace("_", " ")
+    diet_name = (p.get("diet_name") or "").replace("_", " ")
+
+    context_lines: list[str] = [f"The user's name is **{name}**."]
+    if sex:
+        context_lines.append(f"Sex: {sex}.")
+    if height:
+        context_lines.append(f"Height: {height} cm.")
+    if current_weight:
+        context_lines.append(f"Current weight: {current_weight} kg.")
+    context_lines.append(f"Goal: **{goal}**.")
+    if activity:
+        context_lines.append(f"Activity level: {activity}.")
+    if diet_name:
+        context_lines.append(f"Diet: {diet_name}.")
+
+    plan_str = ""
+    if training_plan:
+        plan_str = (
+            "\n\n=== CURRENT TRAINING PLAN ===\n"
+            f"The user's active training plan consists of these workouts: {', '.join(training_plan)}.\n"
+            "Use this plan to give advice that fits their overall program structure."
+        )
+
+    user_context = "\n".join(context_lines)
+
+    prompt = f"""You are a supportive, friendly, and knowledgeable fitness coach named Coach.
+
+=== USER PROFILE ===
+{user_context}
+{plan_str}
+
+You will receive:
+1. The user's training plan and recent workout data (exercises, sets, weights).
+2. Recent nutrition data (may be missing).
+3. A conversation history of messages between you and the user.
+
+=== YOUR ROLE ===
+- You are the user's personal AI fitness coach. Be warm, motivating, and specific.
+- Answer questions about training, programming, exercise selection, nutrition, recovery.
+- When suggesting exercises, relate them to the user's ACTUAL plan and current exercises.
+- Use specific numbers when possible (weights, reps, calories, protein).
+- If they ask about adding an exercise, explain WHERE in their plan it fits and WHY.
+- Keep answers concise (2-5 sentences) unless they ask for detailed explanations.
+- You can reference their specific workouts, exercises, and progress.
+- Do NOT give medical advice. Redirect to a doctor if asked.
+- Address the user by first name.
+
+Respond in plain text (not JSON). Be conversational and natural."""
+
+    return prompt + _language_instruction(lang)
+
+
+async def generate_chat_response(
+    message: str,
+    conversation_history: list[dict],
+    yazio_data: Optional[dict],
+    hevy_data: Optional[list],
+    training_plan: Optional[list[str]] = None,
+    language: str = "de",
+) -> str:
+    """
+    Generate a conversational AI coach response.
+    conversation_history: list of {role: 'user'|'assistant', content: str}
+    """
+    client = genai.Client(api_key=settings.gemini_api_key)
+
+    profile = yazio_data.get("profile") if yazio_data else None
+    system_prompt = _build_chat_system_prompt(profile, training_plan, lang=language)
+
+    # Build context message with workout + nutrition data
+    context_parts: list[str] = []
+
+    if hevy_data:
+        # If training plan set, filter workouts to plan-relevant ones + show all for context
+        context_parts.append(f"=== USER'S RECENT WORKOUTS ({len(hevy_data)} sessions) ===")
+        for i, w in enumerate(hevy_data[:10]):  # Limit to 10 to save tokens
+            context_parts.append(f"\nWorkout {i + 1}:")
+            context_parts.append(_format_workout(w))
+
+    if yazio_data:
+        totals = yazio_data.get("totals", {})
+        goals = yazio_data.get("goals", {})
+        context_parts.append("\n=== YESTERDAY'S NUTRITION ===")
+        context_parts.append(f"Consumed: {totals.get('calories', 0)} kcal | "
+                             f"P: {totals.get('protein', 0)}g | "
+                             f"C: {totals.get('carbs', 0)}g | "
+                             f"F: {totals.get('fat', 0)}g")
+        context_parts.append(f"Goals: {goals.get('calories', 0)} kcal | "
+                             f"P: {goals.get('protein', 0)}g | "
+                             f"C: {goals.get('carbs', 0)}g | "
+                             f"F: {goals.get('fat', 0)}g")
+
+    # Build Gemini conversation with context as first user message
+    contents: list[types.Content] = []
+
+    # Inject context as the first "user" turn (invisible to the actual conversation)
+    if context_parts:
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part(text="[CONTEXT DATA — do not repeat this to the user]\n" + "\n".join(context_parts))],
+        ))
+        contents.append(types.Content(
+            role="model",
+            parts=[types.Part(text="Got it — I have the user's workout and nutrition data ready. What's up?")],
+        ))
+
+    # Add conversation history
+    for msg in conversation_history:
+        role = "model" if msg["role"] == "assistant" else "user"
+        contents.append(types.Content(
+            role=role,
+            parts=[types.Part(text=msg["content"])],
+        ))
+
+    # Add the new message
+    contents.append(types.Content(
+        role="user",
+        parts=[types.Part(text=message)],
+    ))
+
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.7,
+                max_output_tokens=1024,
+            ),
+        )
+
+        text = response.text
+        if not text:
+            logger.error("Gemini returned empty chat response")
+            return "Sorry, I couldn't generate a response. Please try again."
+
+        return text.strip()
+
+    except Exception as exc:
+        logger.error("Gemini chat error: %s", exc)
+        return "Sorry, something went wrong. Please try again in a moment."

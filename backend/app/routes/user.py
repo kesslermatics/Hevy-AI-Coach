@@ -10,6 +10,7 @@ from app.schemas import (
     YazioCredentialsUpdate, YazioCredentialsResponse,
     GoalUpdate, GoalResponse,
     LanguageUpdate, LanguageResponse,
+    TrainingPlanUpdate, TrainingPlanResponse,
 )
 from app.dependencies import get_current_user
 from app.encryption import encrypt_value
@@ -32,6 +33,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
         target_weight=current_user.target_weight,
         first_name=current_user.first_name,
         language=current_user.language or "de",
+        training_plan=current_user.training_plan,
     )
 
 
@@ -142,4 +144,32 @@ async def update_language(
     return LanguageResponse(
         message="Language updated successfully",
         language=current_user.language,
+    )
+
+
+@router.post("/training-plan", response_model=TrainingPlanResponse)
+async def update_training_plan(
+    data: TrainingPlanUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update the user's training plan (list of workout names)."""
+    current_user.training_plan = data.workout_names
+    db.commit()
+    db.refresh(current_user)
+
+    return TrainingPlanResponse(
+        message="Training plan updated successfully",
+        training_plan=current_user.training_plan or [],
+    )
+
+
+@router.get("/training-plan", response_model=TrainingPlanResponse)
+async def get_training_plan(
+    current_user: User = Depends(get_current_user),
+):
+    """Get the user's current training plan."""
+    return TrainingPlanResponse(
+        message="OK",
+        training_plan=current_user.training_plan or [],
     )

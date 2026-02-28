@@ -115,8 +115,31 @@ const translations = {
     'dashboard.lastSessionDesc': { de: 'Review, Rankings & Progression', en: 'Review, rankings & progression' },
     'dashboard.workoutTips': { de: 'Workout-Tipps', en: 'Workout Tips' },
     'dashboard.workoutTipsDesc': { de: 'Wähle eine Session für KI-Coaching', en: 'Pick a session for AI coaching' },
+    'dashboard.newReviews': { de: 'Neu', en: 'New' },
+    'dashboard.syncReviews': { de: 'Reviews prüfen', en: 'Check for reviews' },
+    'dashboard.syncingReviews': { de: 'Wird geprüft…', en: 'Checking…' },
 
     'dashboard.dailyMission': { de: 'Tages-Mission', en: 'Daily Mission' },
+
+    /* ── Training Plan ────────────────────────────────── */
+    'plan.title': { de: 'Mein Trainingsplan', en: 'My Training Plan' },
+    'plan.subtitle': { de: 'Ausgewählte Workouts für dein Coaching', en: 'Selected workouts for your coaching' },
+    'plan.selectWorkouts': { de: 'Workouts auswählen', en: 'Select workouts' },
+    'plan.editPlan': { de: 'Plan bearbeiten', en: 'Edit plan' },
+    'plan.save': { de: 'Speichern', en: 'Save' },
+    'plan.saving': { de: 'Wird gespeichert…', en: 'Saving…' },
+    'plan.cancel': { de: 'Abbrechen', en: 'Cancel' },
+    'plan.noWorkouts': { de: 'Lade deine Workouts…', en: 'Loading your workouts…' },
+    'plan.empty': { de: 'Kein Trainingsplan gesetzt — tippe um Workouts auszuwählen', en: 'No training plan set — tap to select workouts' },
+    'plan.workoutsSelected': { de: '{n} Workouts', en: '{n} workouts' },
+
+    /* ── AI Coach Chat ────────────────────────────────── */
+    'chat.title': { de: 'Coach Chat', en: 'Coach Chat' },
+    'chat.subtitle': { de: 'Frag deinen KI-Coach alles über Training & Ernährung', en: 'Ask your AI coach anything about training & nutrition' },
+    'chat.placeholder': { de: 'Frag den Coach…', en: 'Ask the coach…' },
+    'chat.send': { de: 'Senden', en: 'Send' },
+    'chat.thinking': { de: 'Coach denkt nach…', en: 'Coach is thinking…' },
+    'chat.welcome': { de: 'Hey! Ich bin dein Coach — frag mich alles über Training, Ernährung oder deinen Trainingsplan. 💪', en: "Hey! I'm your Coach — ask me anything about training, nutrition, or your workout plan. 💪" },
 
     /* ── Session Modal ────────────────────────────────── */
     'modal.analyzingSession': { de: 'Deine letzte Session wird analysiert…', en: 'Analyzing your last session…' },
@@ -125,11 +148,19 @@ const translations = {
     'modal.mayTakeSeconds': { de: 'Das kann ein paar Sekunden dauern', en: 'This may take a few seconds' },
     'modal.retry': { de: 'Erneut versuchen', en: 'Retry' },
     'modal.noSessionData': { de: 'Keine aktuellen Session-Daten verfügbar.', en: 'No recent session data available.' },
+    'modal.generatingLive': { de: 'Wird live generiert (noch kein Review vorhanden)…', en: 'Generating live (no cached review yet)…' },
 
     /* ── Workout Picker ───────────────────────────────── */
-    'picker.title': { de: 'Wähle ein Workout', en: 'Pick a workout' },
-    'picker.subtitle': { de: 'Wähle eine Session für KI-Tipps & Vorschläge', en: 'Select a session to get AI-powered tips & suggestions' },
+    'picker.title': { de: 'Deine Workouts', en: 'Your Workouts' },
+    'picker.subtitle': { de: 'Vom Coach analysiert — tippe für Details', en: 'Analyzed by Coach — tap for details' },
     'picker.noWorkouts': { de: 'Keine Workouts gefunden.', en: 'No workouts found.' },
+    'picker.noReviews': { de: 'Noch keine Reviews — der Coach analysiert deine Workouts stündlich im Hintergrund.', en: 'No reviews yet — Coach analyzes your workouts hourly in the background.' },
+    'picker.new': { de: 'Neu', en: 'New' },
+    'picker.reviewed': { de: 'Analysiert', en: 'Reviewed' },
+    'picker.showAll': { de: 'Alle anzeigen', en: 'Show all' },
+    'picker.showPlanOnly': { de: 'Nur Plan', en: 'Plan only' },
+    'picker.fallbackTitle': { de: 'Wähle ein Workout', en: 'Pick a workout' },
+    'picker.fallbackSubtitle': { de: 'Wähle eine Session für KI-Tipps & Vorschläge', en: 'Select a session to get AI-powered tips & suggestions' },
 
     /* ── Workout Tips Content ─────────────────────────── */
     'tips.backToWorkouts': { de: '← Zurück zu den Workouts', en: '← Back to workouts' },  // note: using ← char
