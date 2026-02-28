@@ -313,3 +313,20 @@ export const sendChatMessage = (message: string, conversation_history: ChatMessa
     method: 'POST',
     body: JSON.stringify({ message, conversation_history }),
   });
+
+/* ── Weight History ─────────────────────────────────────── */
+
+export interface WeightHistoryEntry {
+  date: string;
+  weight_kg: number;
+}
+
+export interface WeightHistoryData {
+  entries: WeightHistoryEntry[];
+  start_weight: number | null;
+  current_weight: number | null;
+  count: number;
+}
+
+export const getWeightHistory = (days = 90) =>
+  apiRequest<WeightHistoryData>(`/api/briefing/weight-history?days=${days}`);

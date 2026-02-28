@@ -31,6 +31,7 @@ class User(Base):
     # Relationships
     briefings = relationship("MorningBriefing", back_populates="user", cascade="all, delete-orphan")
     workout_reviews = relationship("WorkoutReview", back_populates="user", cascade="all, delete-orphan")
+    weight_entries = relationship("WeightEntry", back_populates="user", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<User(id={self.id}, username={self.username})>"
@@ -83,3 +84,26 @@ class WorkoutReview(Base):
 
     def __repr__(self):
         return f"<WorkoutReview(user_id={self.user_id}, workout={self.workout_name}, date={self.workout_date})>"
+
+
+class WeightEntry(Base):
+    """
+    Stores daily weight readings collected from Yazio.
+    One entry per user per date — auto-inserted whenever we fetch Yazio data.
+    """
+
+    __tablename__ = "weight_entries"
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", name="uq_user_weight_date"),
+    )
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    date = Column(Date, nullable=False, index=True)
+    weight_kg = Column(Float, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="weight_entries")
+
+    def __repr__(self):
+        return f"<WeightEntry(user_id={self.user_id}, date={self.date}, weight={self.weight_kg})>"

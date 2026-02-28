@@ -144,7 +144,7 @@ For the detailed nutrients (sugar, fiber, saturated_fat, sodium): write a SHORT 
 - **saturated_fat**: Coach on saturated fat. Should be <20g/day for most people. Example: "18g saturated fat — borderline, try to swap some for unsaturated sources."
 - **sodium**: Coach on sodium (value is in mg). Healthy range is 1500-2300mg/day. Example: "2800mg sodium — a bit high, watch the processed foods."
 
-**weight_trend**: Based on the user's current weight, start weight, goal, and target weight change per week, write a short, encouraging summary of their weight journey. Mention current weight, how far they've come from their start weight, how far to their goal, and whether the pace is good. Be specific with numbers. If the user is bulking, frame weight gain positively. If cutting, frame weight loss positively. If no weight data is available, say "No weight data available yet — start tracking to see your progress!"
+**weight_trend**: You will receive a WEIGHT HISTORY section with actual daily weight recordings. Use this data to describe the REAL weight trend — mention start/current weights, how many kg gained/lost over what period, and whether the pace matches the user's goal. If the user is bulking, frame weight gain positively. If cutting, frame weight loss positively. Reference actual numbers from the data. If weight history has multiple entries, mention the trend direction (e.g. "steadily going up", "slight dip last week but back on track"). If only 1-2 entries or no data, say "We're just starting to collect your weight data — keep tracking and you'll see your trend here soon!"
 
 **weather_note**: If weather data is provided, write 1-2 full sentences describing today's weather naturally. Include the current temperature, the expected low and high for the day, and the conditions. Then optionally connect it to the workout. Example: "Right now it's 5°C with light rain — expect lows of 2°C and highs of 8°C today. Perfect excuse to hit the gym instead of running outside!" If no weather data, leave this as an empty string.
 
@@ -279,6 +279,7 @@ async def generate_daily_briefing(
     hevy_data: Optional[list],
     weather_data: Optional[dict] = None,
     language: str = "de",
+    weight_history: Optional[list] = None,
 ) -> dict:
     """
     Call Google Gemini to generate a morning briefing.
@@ -293,6 +294,19 @@ async def generate_daily_briefing(
     profile = yazio_data.get("profile") if yazio_data else None
     system_prompt = _build_system_prompt(profile, lang=language)
     user_message = _build_user_message(yazio_data, hevy_data)
+
+    # Append weight history if available
+    if weight_history and len(weight_history) > 0:
+        user_message += "\n\n=== WEIGHT HISTORY (collected from Yazio) ===\n"
+        user_message += f"Entries: {len(weight_history)} data points\n"
+        for entry in weight_history:
+            user_message += f"  {entry['date']}: {entry['weight_kg']} kg\n"
+        if len(weight_history) >= 2:
+            first = weight_history[0]['weight_kg']
+            last = weight_history[-1]['weight_kg']
+            diff = round(last - first, 2)
+            sign = "+" if diff > 0 else ""
+            user_message += f"Change over period: {sign}{diff} kg\n"
 
     # Append weather data if available
     if weather_data:

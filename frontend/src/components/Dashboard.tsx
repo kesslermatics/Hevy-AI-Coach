@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips, getWeather, getWorkoutReviews, getUnreadCount, markReviewRead, triggerReviewCheck, saveTrainingPlan, sendChatMessage } from '../api/api';
-import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutListItem, WorkoutTips, WeatherData, WorkoutReviewItem, ChatMessage } from '../api/api';
+import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips, getWeather, getWorkoutReviews, getUnreadCount, markReviewRead, saveTrainingPlan, sendChatMessage, getWeightHistory } from '../api/api';
+import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutListItem, WorkoutTips, WeatherData, WorkoutReviewItem, ChatMessage, WeightHistoryEntry } from '../api/api';
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
@@ -96,6 +96,9 @@ export default function Dashboard() {
     // Recovery heatmap collapsed by default
     const [recoveryOpen, setRecoveryOpen] = useState(false);
 
+    // Weight history
+    const [weightHistory, setWeightHistory] = useState<WeightHistoryEntry[]>([]);
+
     // Get user location on mount, then fetch briefing
     useEffect(() => {
         let locationResolved = false;
@@ -128,9 +131,10 @@ export default function Dashboard() {
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Fetch unread review count on mount
+    // Fetch unread review count + weight history on mount
     useEffect(() => {
         getUnreadCount().then(d => setUnreadCount(d.unread_count)).catch(() => { });
+        getWeightHistory(90).then(d => setWeightHistory(d.entries)).catch(() => { });
     }, []);
 
     // Sync training plan from user
@@ -233,7 +237,6 @@ export default function Dashboard() {
     const handleSyncReviews = async () => {
         setSyncing(true);
         try {
-            const result = await triggerReviewCheck();
             // Refresh reviews list and unread count
             const [reviews, unread] = await Promise.all([
                 getWorkoutReviews(),
@@ -469,7 +472,7 @@ export default function Dashboard() {
                     )}
 
                     {/* ─── Weight Trend ─────────────────────── */}
-                    {data.weight_trend && (
+                    {(data.weight_trend || weightHistory.length > 0) && (
                         <div className="card-glass p-6">
                             <div className="flex items-center gap-3 mb-3">
                                 <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-purple-500/10 border-purple-500/30 text-purple-400">
@@ -479,8 +482,24 @@ export default function Dashboard() {
                                     <h3 className="text-sm font-semibold text-cream-50">{t('dashboard.weightTitle')}</h3>
                                     <p className="text-xs text-dark-300">{t('dashboard.weightSubtitle')}</p>
                                 </div>
+                                {weightHistory.length >= 2 && (
+                                    <div className="ml-auto text-right">
+                                        <span className="text-lg font-bold text-cream-50">
+                                            {weightHistory[weightHistory.length - 1].weight_kg.toFixed(1)} kg
+                                        </span>
+                                        {(() => {
+                                            const diff = weightHistory[weightHistory.length - 1].weight_kg - weightHistory[0].weight_kg;
+                                            const sign = diff > 0 ? '+' : '';
+                                            const color = Math.abs(diff) < 0.1 ? 'text-dark-300' : diff > 0 ? 'text-green-400' : 'text-blue-400';
+                                            return <p className={`text-xs ${color}`}>{sign}{diff.toFixed(1)} kg</p>;
+                                        })()}
+                                    </div>
+                                )}
                             </div>
-                            <p className="text-cream-200 text-sm leading-relaxed">{data.weight_trend}</p>
+                            {weightHistory.length >= 2 && <WeightChart entries={weightHistory} />}
+                            {data.weight_trend && (
+                                <p className="text-cream-200 text-sm leading-relaxed mt-3">{data.weight_trend}</p>
+                            )}
                         </div>
                     )}
 
@@ -1418,5 +1437,68 @@ function MacroCard({ icon, label, text, color, bg }: {
             </div>
             <p className="text-cream-200 text-xs leading-relaxed">{text}</p>
         </div>
+    );
+}
+
+/* ── Weight Chart (SVG sparkline) ─────────────────────── */
+function WeightChart({ entries }: { entries: WeightHistoryEntry[] }) {
+    if (entries.length < 2) return null;
+
+    const W = 520;
+    const H = 100;
+    const PAD_X = 36;
+    const PAD_Y = 14;
+
+    const weights = entries.map(e => e.weight_kg);
+    const minW = Math.min(...weights) - 0.3;
+    const maxW = Math.max(...weights) + 0.3;
+    const range = maxW - minW || 1;
+
+    const points = entries.map((e, i) => {
+        const x = PAD_X + (i / (entries.length - 1)) * (W - PAD_X * 2);
+        const y = PAD_Y + (1 - (e.weight_kg - minW) / range) * (H - PAD_Y * 2);
+        return { x, y, w: e.weight_kg, date: e.date };
+    });
+
+    const line = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+    const areaPath = line + ` L${points[points.length - 1].x.toFixed(1)},${H - PAD_Y} L${points[0].x.toFixed(1)},${H - PAD_Y} Z`;
+
+    // Y-axis labels (min, mid, max)
+    const mid = (minW + maxW) / 2;
+    const yLabels = [
+        { val: maxW, y: PAD_Y },
+        { val: mid, y: H / 2 },
+        { val: minW, y: H - PAD_Y },
+    ];
+
+    return (
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-24 mt-2" preserveAspectRatio="none">
+            {/* Grid lines */}
+            {yLabels.map((l, i) => (
+                <g key={i}>
+                    <line x1={PAD_X} y1={l.y} x2={W - PAD_X} y2={l.y} stroke="rgba(255,255,255,0.06)" strokeWidth="1" />
+                    <text x={PAD_X - 4} y={l.y + 3} textAnchor="end" className="fill-dark-400" style={{ fontSize: '9px' }}>
+                        {l.val.toFixed(1)}
+                    </text>
+                </g>
+            ))}
+
+            {/* Area fill */}
+            <path d={areaPath} fill="url(#weightGrad)" opacity="0.3" />
+
+            {/* Line */}
+            <path d={line} fill="none" stroke="#A78BFA" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+
+            {/* End dot */}
+            <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="3.5" fill="#A78BFA" stroke="#1a1a2e" strokeWidth="1.5" />
+
+            {/* Gradient definition */}
+            <defs>
+                <linearGradient id="weightGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#A78BFA" stopOpacity="0.5" />
+                    <stop offset="100%" stopColor="#A78BFA" stopOpacity="0" />
+                </linearGradient>
+            </defs>
+        </svg>
     );
 }

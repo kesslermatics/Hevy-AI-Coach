@@ -27,6 +27,7 @@ from sqlalchemy import text as _sql_text
 with engine.connect() as _conn:
     _migrations = [
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS training_plan JSON;",
+        # weight_entries table is created by create_all above (new table)
     ]
     for stmt in _migrations:
         try:

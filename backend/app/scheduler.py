@@ -15,7 +15,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
-from app.models import User, MorningBriefing, WorkoutReview
+from app.models import User, MorningBriefing, WorkoutReview, WeightEntry
 from app.services.aggregator import gather_user_context
 from app.services.ai_service import generate_daily_briefing, generate_session_review, generate_workout_tips
 
@@ -40,6 +40,24 @@ async def _generate_for_user(user: User, db: Session) -> bool:
 
     try:
         context = await gather_user_context(user)
+
+        # Log weight from Yazio
+        yazio = context.get("yazio")
+        if yazio and yazio.get("profile"):
+            weight = yazio["profile"].get("current_weight_kg")
+            if weight and weight > 0:
+                existing_w = (
+                    db.query(WeightEntry)
+                    .filter(WeightEntry.user_id == user.id, WeightEntry.date == today)
+                    .first()
+                )
+                if not existing_w:
+                    db.add(WeightEntry(user_id=user.id, date=today, weight_kg=round(weight, 2)))
+                    try:
+                        db.commit()
+                    except Exception:
+                        db.rollback()
+
         briefing_data = await generate_daily_briefing(
             yazio_data=context["yazio"],
             hevy_data=context["hevy"],

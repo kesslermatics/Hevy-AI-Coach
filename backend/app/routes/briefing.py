@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.models import User, MorningBriefing, WorkoutReview
+from app.models import User, MorningBriefing, WorkoutReview, WeightEntry
 from app.schemas import BriefingResponse
 from app.services.aggregator import gather_user_context
 from app.services.ai_service import generate_daily_briefing, generate_session_review, generate_workout_tips, generate_chat_response
@@ -24,6 +24,33 @@ from app.encryption import decrypt_value
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/briefing", tags=["Briefing"])
+
+
+def _log_weight_entry(user_id, yazio_data: Optional[dict], db: Session):
+    """Log today's weight from Yazio data into weight_entries (idempotent)."""
+    if not yazio_data or not yazio_data.get("profile"):
+        return
+    weight = yazio_data["profile"].get("current_weight_kg")
+    if not weight or weight <= 0:
+        return
+    today = date.today()
+    existing = (
+        db.query(WeightEntry)
+        .filter(WeightEntry.user_id == user_id, WeightEntry.date == today)
+        .first()
+    )
+    if existing:
+        # Update if weight changed
+        if abs(existing.weight_kg - weight) > 0.01:
+            existing.weight_kg = weight
+            db.commit()
+        return
+    entry = WeightEntry(user_id=user_id, date=today, weight_kg=round(weight, 2))
+    db.add(entry)
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
 
 
 async def _generate_and_save(
@@ -47,12 +74,29 @@ async def _generate_and_save(
             db.commit()
             db.refresh(user)
 
+    # Log weight entry from Yazio
+    _log_weight_entry(user.id, yazio, db)
+
+    # Fetch weight history for AI context
+    weight_history = (
+        db.query(WeightEntry)
+        .filter(WeightEntry.user_id == user.id)
+        .order_by(WeightEntry.date.desc())
+        .limit(90)
+        .all()
+    )
+    weight_history_data = [
+        {"date": e.date.isoformat(), "weight_kg": e.weight_kg}
+        for e in reversed(weight_history)
+    ]
+
     # 2) Call Gemini
     briefing_data = await generate_daily_briefing(
         yazio_data=context["yazio"],
         hevy_data=context["hevy"],
         weather_data=weather_data,
         language=lang,
+        weight_history=weight_history_data,
     )
 
     # 3) Persist
@@ -409,6 +453,38 @@ async def get_activity_heatmap(
     return {
         "workouts": workout_dates,
         "nutrition": nutrition_dates,
+    }
+
+
+@router.get("/weight-history")
+async def get_weight_history(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    days: int = Query(90, ge=7, le=365),
+):
+    """
+    Return the user's weight history (last N days).
+    Data is collected from Yazio on each briefing generation.
+    """
+    from datetime import timedelta
+    cutoff = date.today() - timedelta(days=days)
+    entries = (
+        db.query(WeightEntry)
+        .filter(
+            WeightEntry.user_id == current_user.id,
+            WeightEntry.date >= cutoff,
+        )
+        .order_by(WeightEntry.date.asc())
+        .all()
+    )
+    return {
+        "entries": [
+            {"date": e.date.isoformat(), "weight_kg": round(e.weight_kg, 2)}
+            for e in entries
+        ],
+        "start_weight": entries[0].weight_kg if entries else None,
+        "current_weight": entries[-1].weight_kg if entries else None,
+        "count": len(entries),
     }
 
 
