@@ -19,8 +19,21 @@ logging.basicConfig(
     format="%(asctime)s | %(levelname)-7s | %(name)s | %(message)s",
 )
 
-# Create database tables
+# Create database tables (new tables only — does not add columns to existing tables)
 Base.metadata.create_all(bind=engine)
+
+# Auto-migrate: add any missing columns to existing tables
+from sqlalchemy import text as _sql_text
+with engine.connect() as _conn:
+    _migrations = [
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS training_plan JSON;",
+    ]
+    for stmt in _migrations:
+        try:
+            _conn.execute(_sql_text(stmt))
+        except Exception:
+            pass  # column already exists or DB doesn't support IF NOT EXISTS
+    _conn.commit()
 
 
 @asynccontextmanager
