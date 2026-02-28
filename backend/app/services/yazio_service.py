@@ -115,8 +115,15 @@ def _parse_summary(raw: dict) -> dict:
         "sugar": 0.0, "fiber": 0.0, "saturated_fat": 0.0, "sodium": 0.0,
     }
 
+    _logged_keys = False
     for key in MEAL_KEYS:
         nutrients = meals.get(key, {}).get("nutrients", {})
+
+        # Log the actual nutrient keys once so we can debug missing fields
+        if not _logged_keys and nutrients:
+            logger.info("Yazio nutrient keys for meal '%s': %s", key, list(nutrients.keys()))
+            _logged_keys = True
+
         cal  = nutrients.get("energy.energy", 0)
         prot = nutrients.get("nutrient.protein", 0)
         carb = nutrients.get("nutrient.carb", 0)
