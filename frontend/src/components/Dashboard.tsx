@@ -18,7 +18,16 @@ type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInf
 /* ── Format raw ISO date to human-readable ──────────── */
 function formatSessionDate(raw: string, lang: string): string {
     try {
-        const d = new Date(raw);
+        // Date-only strings ("2026-02-28") are parsed as UTC midnight by JS,
+        // which shifts back one day in positive timezones (e.g. CET). Fix by
+        // parsing as local date when there's no time component.
+        let d: Date;
+        if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+            const [y, m, day] = raw.split('-').map(Number);
+            d = new Date(y, m - 1, day);
+        } else {
+            d = new Date(raw);
+        }
         if (isNaN(d.getTime())) return raw;
         if (lang === 'de') {
             const days = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
