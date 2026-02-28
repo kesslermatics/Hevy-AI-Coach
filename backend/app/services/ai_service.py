@@ -103,6 +103,15 @@ def _build_system_prompt(profile: Optional[dict], lang: str = "de") -> str:
     if start_weight and current_weight and abs(start_weight - current_weight) > 0.5:
         context_lines.append(f"Start weight: {start_weight} kg (progress: {round(start_weight - current_weight, 1)} kg).")
     context_lines.append(f"Goal: **{goal}**.")
+    # Clarify goal direction based on target weight vs current weight
+    target_w = p.get("target_weight_kg")
+    if target_w and current_weight:
+        if target_w > current_weight:
+            context_lines.append(f"Target weight: {target_w} kg — the user wants to GAIN weight (bulk). Weight gain is positive progress.")
+        elif target_w < current_weight:
+            context_lines.append(f"Target weight: {target_w} kg — the user wants to LOSE weight (cut). Weight loss is positive progress.")
+        else:
+            context_lines.append(f"Target weight: {target_w} kg — the user wants to MAINTAIN their current weight.")
     if weight_change:
         context_lines.append(f"Target weight change: {weight_change} kg/week.")
     if activity:
@@ -117,8 +126,15 @@ def _build_system_prompt(profile: Optional[dict], lang: str = "de") -> str:
 === USER PROFILE ===
 {user_context}
 
+=== IMPORTANT: NUTRITION GOALS INTERPRETATION ===
+The calorie/macro goals from Yazio are the user's DAILY TARGETS, NOT their maintenance calories.
+- If the user's goal is "weight gain" / "bulk" / "muscle gain": the calorie goal is a SURPLUS target. They WANT to eat that much or more.
+- If the user's goal is "weight loss" / "cut": the calorie goal is a DEFICIT target. They should aim for that amount.
+- If the user's goal is "maintain": the calorie goal is their maintenance.
+NEVER say the calorie goal is "maintenance" unless the user's actual goal is to maintain weight. If their goal is weight gain, say it's their surplus target.
+
 You will receive:
-1. Yesterday's nutrition data from Yazio (may be partial or missing entirely).
+1. Yesterday's nutrition data AND today's current nutrition from Yazio (may be partial or missing).
 2. The last few completed workouts from Hevy (exercises, sets, weights).
 3. Current weather data (may be missing).
 
@@ -177,11 +193,11 @@ Respond ONLY with the JSON object. No markdown, no explanation."""
     return base_prompt + _language_instruction(lang)
 
 
-def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -> str:
+def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list], today_nutrition: Optional[dict] = None) -> str:
     """Build the user message containing the raw context data."""
     parts: list[str] = []
 
-    # ── Nutrition ────────────────────────────────────────
+    # ── Yesterday's Nutrition ────────────────────────────
     if yazio_data:
         totals = yazio_data.get("totals", {})
         goals = yazio_data.get("goals", {})
@@ -192,7 +208,7 @@ def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -
                      f"P: {totals.get('protein', 0)}g | "
                      f"C: {totals.get('carbs', 0)}g | "
                      f"F: {totals.get('fat', 0)}g")
-        parts.append(f"Goals: {goals.get('calories', 0)} kcal | "
+        parts.append(f"Goals (DAILY TARGET, not maintenance!): {goals.get('calories', 0)} kcal | "
                      f"P: {goals.get('protein', 0)}g | "
                      f"C: {goals.get('carbs', 0)}g | "
                      f"F: {goals.get('fat', 0)}g")
@@ -216,6 +232,35 @@ def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -
             parts.append(f"Steps: {steps:,} | Activity burn: {yazio_data.get('activity_kcal', 0)} kcal")
     else:
         parts.append("=== NUTRITION: No data available (Yazio not connected or no tracking yesterday) ===")
+
+    # ── Today's Nutrition (live/current) ─────────────────
+    if today_nutrition:
+        t_totals = today_nutrition.get("totals", {})
+        t_goals = today_nutrition.get("goals", {})
+        t_meals = today_nutrition.get("meals", {})
+        parts.append("")
+        parts.append("=== TODAY'S NUTRITION SO FAR (Yazio — live data) ===")
+        parts.append(f"Total so far: {t_totals.get('calories', 0)} kcal | "
+                     f"P: {t_totals.get('protein', 0)}g | "
+                     f"C: {t_totals.get('carbs', 0)}g | "
+                     f"F: {t_totals.get('fat', 0)}g")
+        parts.append(f"Today's Goals (DAILY TARGET): {t_goals.get('calories', 0)} kcal | "
+                     f"P: {t_goals.get('protein', 0)}g | "
+                     f"C: {t_goals.get('carbs', 0)}g | "
+                     f"F: {t_goals.get('fat', 0)}g")
+        remaining_cal = t_goals.get('calories', 0) - t_totals.get('calories', 0)
+        remaining_protein = t_goals.get('protein', 0) - t_totals.get('protein', 0)
+        remaining_carbs = t_goals.get('carbs', 0) - t_totals.get('carbs', 0)
+        parts.append(f"Remaining today: {max(0, remaining_cal):.0f} kcal | "
+                     f"P: {max(0, remaining_protein):.0f}g | "
+                     f"C: {max(0, remaining_carbs):.0f}g")
+        for meal_key, meal_vals in t_meals.items():
+            cal = meal_vals.get("calories", 0)
+            if cal > 0:
+                parts.append(f"  {meal_key.title()}: {cal} kcal | "
+                             f"P: {meal_vals.get('protein', 0)}g | "
+                             f"C: {meal_vals.get('carbs', 0)}g | "
+                             f"F: {meal_vals.get('fat', 0)}g")
 
     parts.append("")
 
@@ -252,6 +297,7 @@ async def generate_daily_briefing(
     weather_data: Optional[dict] = None,
     language: str = "de",
     weight_history: Optional[list] = None,
+    today_nutrition: Optional[dict] = None,
 ) -> dict:
     """
     Call Google Gemini to generate a morning briefing.
@@ -265,7 +311,7 @@ async def generate_daily_briefing(
     # Extract profile from Yazio data (name, height, weight, goal, diet…)
     profile = yazio_data.get("profile") if yazio_data else None
     system_prompt = _build_system_prompt(profile, lang=language)
-    user_message = _build_user_message(yazio_data, hevy_data)
+    user_message = _build_user_message(yazio_data, hevy_data, today_nutrition=today_nutrition)
 
     # Append weight history if available
     if weight_history and len(weight_history) > 0:
@@ -512,6 +558,7 @@ async def generate_session_review(
     hevy_data: Optional[list],
     language: str = "de",
     previous_reviews: Optional[list[dict]] = None,
+    today_nutrition: Optional[dict] = None,
 ) -> dict:
     """
     Call Gemini to generate a detailed session review + next session suggestion.
@@ -522,7 +569,7 @@ async def generate_session_review(
 
     profile = yazio_data.get("profile") if yazio_data else None
     system_prompt = _build_session_review_prompt(profile, lang=language)
-    user_message = _build_user_message(yazio_data, hevy_data)  # Include nutrition for causality
+    user_message = _build_user_message(yazio_data, hevy_data, today_nutrition=today_nutrition)  # Include nutrition for causality
 
     # ── Coach Memory: append previous reviews for continuity (up to 3) ──
     if previous_reviews:
@@ -924,6 +971,7 @@ async def generate_chat_response(
     hevy_data: Optional[list],
     training_plan: Optional[list[str]] = None,
     language: str = "de",
+    today_nutrition: Optional[dict] = None,
 ) -> str:
     """
     Generate a conversational AI coach response.
@@ -952,10 +1000,27 @@ async def generate_chat_response(
                              f"P: {totals.get('protein', 0)}g | "
                              f"C: {totals.get('carbs', 0)}g | "
                              f"F: {totals.get('fat', 0)}g")
-        context_parts.append(f"Goals: {goals.get('calories', 0)} kcal | "
+        context_parts.append(f"Goals (DAILY TARGET): {goals.get('calories', 0)} kcal | "
                              f"P: {goals.get('protein', 0)}g | "
                              f"C: {goals.get('carbs', 0)}g | "
                              f"F: {goals.get('fat', 0)}g")
+
+    if today_nutrition:
+        t_totals = today_nutrition.get("totals", {})
+        t_goals = today_nutrition.get("goals", {})
+        context_parts.append("\n=== TODAY'S NUTRITION SO FAR (live data) ===")
+        context_parts.append(f"Eaten so far: {t_totals.get('calories', 0)} kcal | "
+                             f"P: {t_totals.get('protein', 0)}g | "
+                             f"C: {t_totals.get('carbs', 0)}g | "
+                             f"F: {t_totals.get('fat', 0)}g")
+        context_parts.append(f"Today's Goals (DAILY TARGET): {t_goals.get('calories', 0)} kcal | "
+                             f"P: {t_goals.get('protein', 0)}g | "
+                             f"C: {t_goals.get('carbs', 0)}g | "
+                             f"F: {t_goals.get('fat', 0)}g")
+        remaining_cal = t_goals.get('calories', 0) - t_totals.get('calories', 0)
+        remaining_protein = t_goals.get('protein', 0) - t_totals.get('protein', 0)
+        context_parts.append(f"Remaining today: {max(0, remaining_cal):.0f} kcal | "
+                             f"P: {max(0, remaining_protein):.0f}g")
 
     # Build Gemini conversation with context as first user message
     contents: list[types.Content] = []

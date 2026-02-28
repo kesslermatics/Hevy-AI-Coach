@@ -17,8 +17,16 @@ from app.schemas import BriefingResponse
 from app.services.aggregator import gather_user_context
 from app.services.ai_service import generate_daily_briefing, generate_session_review, generate_workout_tips, generate_chat_response
 from app.services.weather_service import fetch_weather
-from app.services.hevy_service import fetch_workout_dates
-from app.services.yazio_service import fetch_nutrition_dates
+from app.services.hevy_service import fetch_workout_dates, fetch_recent_workouts
+from app.services.yazio_service import fetch_nutrition_dates, fetch_yazio_summary
+from app.services.analytics_service import (
+    compute_macro_performance_correlation,
+    compute_progressive_overload,
+    compute_weekly_streaks,
+    compute_weekly_report,
+    compute_monthly_report,
+    compute_achievements,
+)
 from app.encryption import decrypt_value
 
 logger = logging.getLogger(__name__)
@@ -97,6 +105,7 @@ async def _generate_and_save(
         weather_data=weather_data,
         language=lang,
         weight_history=weight_history_data,
+        today_nutrition=context.get("yazio_today"),
     )
 
     # 3) Persist
@@ -563,6 +572,284 @@ async def coach_chat(
         hevy_data=context["hevy"],
         training_plan=current_user.training_plan,
         language=current_user.language or "de",
+        today_nutrition=context.get("yazio_today"),
     )
 
     return {"response": response_text}
+
+
+# ════════════════════════════════════════════════════════
+#  ANALYTICS ENDPOINTS
+# ════════════════════════════════════════════════════════
+
+async def _build_nutrition_by_date(user: User, days: int = 180) -> dict:
+    """Build a dict of {date_str: {calories, protein, carbs, fat, goals}} from Yazio."""
+    if not user.yazio_email or not user.yazio_password:
+        return {}
+
+    try:
+        email = decrypt_value(user.yazio_email)
+        password = decrypt_value(user.yazio_password)
+    except Exception:
+        return {}
+
+    import asyncio
+    import httpx
+    from app.services.yazio_service import _yazio_login, YAZIO_BASE_URL, MEAL_KEYS
+
+    nutrition = {}
+    today = date.today()
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        token = await _yazio_login(client, email, password)
+        if not token:
+            return {}
+
+        semaphore = asyncio.Semaphore(5)
+
+        async def fetch_day(d: date):
+            async with semaphore:
+                try:
+                    resp = await client.get(
+                        f"{YAZIO_BASE_URL}/user/widgets/daily-summary",
+                        headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+                        params={"date": d.isoformat()},
+                    )
+                    if resp.status_code != 200:
+                        return
+                    data = resp.json()
+                    meals = data.get("meals", {})
+                    goals = data.get("goals", {})
+
+                    total_cal = 0.0
+                    total_prot = 0.0
+                    total_carb = 0.0
+                    total_fat = 0.0
+                    for key in MEAL_KEYS:
+                        nutrients = meals.get(key, {}).get("nutrients", {})
+                        total_cal += nutrients.get("energy.energy", 0)
+                        total_prot += nutrients.get("nutrient.protein", 0)
+                        total_carb += nutrients.get("nutrient.carb", 0)
+                        total_fat += nutrients.get("nutrient.fat", 0)
+
+                    if total_cal > 0:
+                        nutrition[d.isoformat()] = {
+                            "calories": round(total_cal, 1),
+                            "protein": round(total_prot, 1),
+                            "carbs": round(total_carb, 1),
+                            "fat": round(total_fat, 1),
+                            "goals": {
+                                "calories": round(goals.get("energy.energy", 0), 1),
+                                "protein": round(goals.get("nutrient.protein", 0), 1),
+                                "carbs": round(goals.get("nutrient.carb", 0), 1),
+                                "fat": round(goals.get("nutrient.fat", 0), 1),
+                            },
+                        }
+                except Exception:
+                    pass
+
+        dates_to_check = [today - timedelta(days=i) for i in range(days)]
+        await asyncio.gather(*[fetch_day(d) for d in dates_to_check])
+
+    return nutrition
+
+
+@router.get("/macro-performance")
+async def get_macro_performance(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Macro-Performance Correlation: Links nutrition data with workout performance.
+    """
+    context = await gather_user_context(current_user, include_today_nutrition=False)
+    workouts = context.get("hevy") or []
+
+    # Build nutrition by date (up to 90 days to limit API calls)
+    nutrition_by_date = await _build_nutrition_by_date(current_user, days=90)
+
+    result = compute_macro_performance_correlation(workouts, nutrition_by_date)
+    return result
+
+
+@router.get("/progressive-overload")
+async def get_progressive_overload(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Progressive Overload Dashboard: Per-exercise progression over time.
+    """
+    context = await gather_user_context(current_user, include_today_nutrition=False)
+    workouts = context.get("hevy") or []
+    result = compute_progressive_overload(workouts)
+    return result
+
+
+@router.get("/streaks")
+async def get_streaks(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Weekly streaks for training and nutrition."""
+    workout_dates: list[str] = []
+    nutrition_dates: list[str] = []
+
+    if current_user.hevy_api_key:
+        try:
+            api_key = decrypt_value(current_user.hevy_api_key)
+            raw = await fetch_workout_dates(api_key, max_pages=20)
+            workout_dates = [w["date"] for w in raw if w.get("date")]
+        except Exception as exc:
+            logger.error("Failed to fetch workout dates for streaks: %s", exc)
+
+    if current_user.yazio_email and current_user.yazio_password:
+        try:
+            email = decrypt_value(current_user.yazio_email)
+            password = decrypt_value(current_user.yazio_password)
+            raw = await fetch_nutrition_dates(email, password, days=365)
+            nutrition_dates = [n["date"] for n in raw if n.get("date")]
+        except Exception as exc:
+            logger.error("Failed to fetch nutrition dates for streaks: %s", exc)
+
+    result = compute_weekly_streaks(workout_dates, nutrition_dates)
+    return result
+
+
+@router.get("/weekly-report")
+async def get_weekly_report(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    week_offset: int = Query(0, ge=0, le=52),
+):
+    """
+    Weekly Report with training, nutrition, and weight summary.
+    week_offset=0 means current week.
+    """
+    context = await gather_user_context(current_user, include_today_nutrition=False)
+    workouts = context.get("hevy") or []
+
+    # Get nutrition data
+    nutrition_by_date = await _build_nutrition_by_date(current_user, days=90)
+
+    # Get weight entries
+    weight_entries_raw = (
+        db.query(WeightEntry)
+        .filter(WeightEntry.user_id == current_user.id)
+        .order_by(WeightEntry.date.asc())
+        .all()
+    )
+    weight_entries = [{"date": e.date.isoformat(), "weight_kg": e.weight_kg} for e in weight_entries_raw]
+
+    result = compute_weekly_report(workouts, nutrition_by_date, weight_entries, week_offset)
+
+    # Also compute the previous week for comparison
+    prev_result = compute_weekly_report(workouts, nutrition_by_date, weight_entries, week_offset + 1)
+
+    return {
+        "current": result,
+        "previous": prev_result,
+    }
+
+
+@router.get("/monthly-report")
+async def get_monthly_report(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    month_offset: int = Query(0, ge=0, le=12),
+):
+    """Monthly Report with comparison to previous month."""
+    context = await gather_user_context(current_user, include_today_nutrition=False)
+    workouts = context.get("hevy") or []
+    nutrition_by_date = await _build_nutrition_by_date(current_user, days=365)
+
+    weight_entries_raw = (
+        db.query(WeightEntry)
+        .filter(WeightEntry.user_id == current_user.id)
+        .order_by(WeightEntry.date.asc())
+        .all()
+    )
+    weight_entries = [{"date": e.date.isoformat(), "weight_kg": e.weight_kg} for e in weight_entries_raw]
+
+    result = compute_monthly_report(workouts, nutrition_by_date, weight_entries, month_offset)
+    prev_result = compute_monthly_report(workouts, nutrition_by_date, weight_entries, month_offset + 1)
+
+    return {
+        "current": result,
+        "previous": prev_result,
+    }
+
+
+@router.get("/achievements")
+async def get_achievements(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Compute all achievements/badges for the user."""
+    context = await gather_user_context(current_user, include_today_nutrition=False)
+    workouts = context.get("hevy") or []
+
+    # Get workout dates
+    workout_dates: list[str] = []
+    if current_user.hevy_api_key:
+        try:
+            api_key = decrypt_value(current_user.hevy_api_key)
+            raw = await fetch_workout_dates(api_key, max_pages=20)
+            workout_dates = [w["date"] for w in raw if w.get("date")]
+        except Exception:
+            pass
+
+    # Get nutrition dates
+    nutrition_dates: list[str] = []
+    if current_user.yazio_email and current_user.yazio_password:
+        try:
+            email = decrypt_value(current_user.yazio_email)
+            password = decrypt_value(current_user.yazio_password)
+            raw = await fetch_nutrition_dates(email, password, days=365)
+            nutrition_dates = [n["date"] for n in raw if n.get("date")]
+        except Exception:
+            pass
+
+    # Get weight entries
+    weight_entries_raw = (
+        db.query(WeightEntry)
+        .filter(WeightEntry.user_id == current_user.id)
+        .order_by(WeightEntry.date.asc())
+        .all()
+    )
+    weight_entries = [{"date": e.date.isoformat(), "weight_kg": e.weight_kg} for e in weight_entries_raw]
+
+    # Get nutrition by date for protein tracking
+    nutrition_by_date = await _build_nutrition_by_date(current_user, days=365)
+
+    result = compute_achievements(
+        workouts=workouts,
+        nutrition_dates=nutrition_dates,
+        workout_dates=workout_dates,
+        weight_entries=weight_entries,
+        nutrition_by_date=nutrition_by_date,
+    )
+    return result
+
+
+@router.get("/today-nutrition")
+async def get_today_nutrition(
+    current_user: User = Depends(get_current_user),
+):
+    """Get today's live nutrition data from Yazio."""
+    if not current_user.yazio_email or not current_user.yazio_password:
+        return {"error": "No Yazio credentials"}
+    try:
+        email = decrypt_value(current_user.yazio_email)
+        password = decrypt_value(current_user.yazio_password)
+        data = await fetch_yazio_summary(email, password, target_date=date.today())
+        if not data:
+            return {"error": "Could not fetch today's data"}
+        return {
+            "totals": data.get("totals", {}),
+            "goals": data.get("goals", {}),
+            "meals": data.get("meals", {}),
+            "water_ml": data.get("water_ml", 0),
+        }
+    except Exception as exc:
+        logger.error("Failed to fetch today's nutrition: %s", exc)
+        return {"error": str(exc)}

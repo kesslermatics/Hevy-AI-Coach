@@ -326,3 +326,165 @@ export interface WeightHistoryData {
 
 export const getWeightHistory = (days = 90) =>
   apiRequest<WeightHistoryData>(`/api/briefing/weight-history?days=${days}`);
+
+/* ── Macro-Performance Correlation ──────────────────── */
+
+export interface MacroPerformanceDataPoint {
+  workout_date: string;
+  workout_title: string;
+  volume: number;
+  best_e1rm: number;
+  duration_min: number | null;
+  prev_day_calories: number;
+  prev_day_protein: number;
+  prev_day_carbs: number;
+  prev_day_fat: number;
+  calorie_goal: number;
+  protein_goal: number;
+}
+
+export interface MacroInsight {
+  type: string;
+  message_de: string;
+  message_en: string;
+  diff_percent: number;
+  threshold?: number;
+}
+
+export interface MacroPerformanceData {
+  data_points: MacroPerformanceDataPoint[];
+  insights: MacroInsight[];
+  has_enough_data: boolean;
+  total_correlated_workouts: number;
+}
+
+export const getMacroPerformance = () =>
+  apiRequest<MacroPerformanceData>('/api/briefing/macro-performance');
+
+/* ── Progressive Overload ───────────────────────────── */
+
+export interface ExerciseProgressDataPoint {
+  date: string;
+  best_set: string;
+  e1rm: number;
+  volume: number;
+  sets: number;
+  reps: number;
+  muscle_group: string;
+}
+
+export interface ExerciseProgress {
+  name: string;
+  muscle_group: string;
+  data_points: ExerciseProgressDataPoint[];
+  sessions_count: number;
+  first_e1rm: number;
+  latest_e1rm: number;
+  peak_e1rm: number;
+  change_percent: number;
+}
+
+export const getProgressiveOverload = () =>
+  apiRequest<ExerciseProgress[]>('/api/briefing/progressive-overload');
+
+/* ── Streaks ────────────────────────────────────────── */
+
+export interface StreakInfo {
+  current_streak: number;
+  longest_streak: number;
+  total_active_weeks: number;
+}
+
+export interface StreaksData {
+  training: StreakInfo;
+  nutrition: StreakInfo;
+  combined: StreakInfo;
+}
+
+export const getStreaks = () =>
+  apiRequest<StreaksData>('/api/briefing/streaks');
+
+/* ── Weekly / Monthly Reports ───────────────────────── */
+
+export interface ReportTraining {
+  workouts_count: number;
+  total_volume_kg: number;
+  total_sets: number;
+  total_duration_min: number;
+  muscle_groups: Record<string, number>;
+  workout_names?: string[];
+  best_e1rms?: Record<string, number>;
+}
+
+export interface ReportNutrition {
+  days_tracked: number;
+  avg_calories: number;
+  avg_protein: number;
+  avg_carbs?: number;
+  avg_fat?: number;
+  calorie_goal?: number;
+  protein_goal?: number;
+}
+
+export interface ReportWeight {
+  start: number | null;
+  end: number | null;
+  change: number | null;
+}
+
+export interface WeeklyReport {
+  week_start: string;
+  week_end: string;
+  week_offset: number;
+  training: ReportTraining;
+  nutrition: ReportNutrition;
+  weight: ReportWeight;
+}
+
+export interface MonthlyReport {
+  month: string;
+  month_start: string;
+  month_end: string;
+  month_offset: number;
+  training: ReportTraining;
+  nutrition: ReportNutrition;
+  weight: ReportWeight;
+}
+
+export const getWeeklyReport = (weekOffset = 0) =>
+  apiRequest<{ current: WeeklyReport; previous: WeeklyReport }>(`/api/briefing/weekly-report?week_offset=${weekOffset}`);
+
+export const getMonthlyReport = (monthOffset = 0) =>
+  apiRequest<{ current: MonthlyReport; previous: MonthlyReport }>(`/api/briefing/monthly-report?month_offset=${monthOffset}`);
+
+/* ── Achievements ───────────────────────────────────── */
+
+export interface Achievement {
+  id: string;
+  name_de: string;
+  name_en: string;
+  desc_de: string;
+  desc_en: string;
+  icon: string;
+  category: string;
+  unlocked: boolean;
+  unlocked_date: string | null;
+  progress: number;
+  target: number;
+}
+
+export const getAchievements = () =>
+  apiRequest<Achievement[]>('/api/briefing/achievements');
+
+/* ── Today's Nutrition ──────────────────────────────── */
+
+export interface TodayNutrition {
+  totals: { calories: number; protein: number; carbs: number; fat: number };
+  goals: { calories: number; protein: number; carbs: number; fat: number };
+  meals: Record<string, { calories: number; protein: number; carbs: number; fat: number }>;
+  water_ml: number;
+  error?: string;
+}
+
+export const getTodayNutrition = () =>
+  apiRequest<TodayNutrition>('/api/briefing/today-nutrition');

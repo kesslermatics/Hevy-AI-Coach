@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips, getWeather, getWorkoutReviews, getUnreadCount, markReviewRead, saveTrainingPlan, sendChatMessage, getWeightHistory } from '../api/api';
-import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutListItem, WorkoutTips, WeatherData, WorkoutReviewItem, ChatMessage, WeightHistoryEntry } from '../api/api';
+import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips, getWeather, getWorkoutReviews, getUnreadCount, markReviewRead, saveTrainingPlan, sendChatMessage, getWeightHistory, getTodayNutrition, getStreaks } from '../api/api';
+import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutListItem, WorkoutTips, WeatherData, WorkoutReviewItem, ChatMessage, WeightHistoryEntry, TodayNutrition, StreaksData } from '../api/api';
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
@@ -99,6 +99,12 @@ export default function Dashboard() {
     // Weight history
     const [weightHistory, setWeightHistory] = useState<WeightHistoryEntry[]>([]);
 
+    // Today's live nutrition
+    const [todayNutrition, setTodayNutrition] = useState<TodayNutrition | null>(null);
+
+    // Weekly streaks
+    const [streaks, setStreaks] = useState<StreaksData | null>(null);
+
     // Get user location on mount, then fetch briefing
     useEffect(() => {
         let locationResolved = false;
@@ -131,10 +137,12 @@ export default function Dashboard() {
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Fetch unread review count + weight history on mount
+    // Fetch unread review count + weight history + today nutrition + streaks on mount
     useEffect(() => {
         getUnreadCount().then(d => setUnreadCount(d.unread_count)).catch(() => { });
         getWeightHistory(90).then(d => setWeightHistory(d.entries)).catch(() => { });
+        getTodayNutrition().then(setTodayNutrition).catch(() => { });
+        getStreaks().then(setStreaks).catch(() => { });
     }, []);
 
     // Sync training plan from user
@@ -364,6 +372,51 @@ export default function Dashboard() {
                         <div className="card-glass p-4 flex items-center gap-3">
                             <span className="text-2xl">{weather?.emoji || '🌤️'}</span>
                             <p className="text-cream-200 text-sm leading-relaxed">{data.weather_note}</p>
+                        </div>
+                    )}
+
+                    {/* ─── Today's Nutrition (Live) ─────────── */}
+                    {todayNutrition && !todayNutrition.error && (
+                        <div className="card-glass p-5">
+                            <div className="flex items-center gap-3 mb-3">
+                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
+                                    <UtensilsCrossed className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h2 className="text-sm font-semibold text-cream-50">{t('today.title')}</h2>
+                                    <p className="text-xs text-dark-300">{t('today.soFar')}</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-4 gap-2">
+                                <NutritionGauge
+                                    label={t('dashboard.calories')} icon={<Flame className="w-3.5 h-3.5" />}
+                                    current={todayNutrition.totals.calories} goal={todayNutrition.goals.calories}
+                                    color="text-orange-400" bgColor="bg-orange-500" unit="kcal" />
+                                <NutritionGauge
+                                    label={t('dashboard.protein')} icon={<Beef className="w-3.5 h-3.5" />}
+                                    current={todayNutrition.totals.protein} goal={todayNutrition.goals.protein}
+                                    color="text-red-400" bgColor="bg-red-500" unit="g" />
+                                <NutritionGauge
+                                    label={t('dashboard.carbs')} icon={<Wheat className="w-3.5 h-3.5" />}
+                                    current={todayNutrition.totals.carbs} goal={todayNutrition.goals.carbs}
+                                    color="text-yellow-400" bgColor="bg-yellow-500" unit="g" />
+                                <NutritionGauge
+                                    label={t('dashboard.fat')} icon={<Droplets className="w-3.5 h-3.5" />}
+                                    current={todayNutrition.totals.fat} goal={todayNutrition.goals.fat}
+                                    color="text-emerald-400" bgColor="bg-emerald-500" unit="g" />
+                            </div>
+                        </div>
+                    )}
+
+                    {/* ─── Weekly Streaks (Mini) ────────────── */}
+                    {streaks && (
+                        <div className="grid grid-cols-3 gap-3">
+                            <MiniStreak label={t('streaks.training')} icon={<Dumbbell size={12} />}
+                                current={streaks.training.current_streak} color="text-blue-400" bg="bg-blue-500/10 border-blue-500/20" />
+                            <MiniStreak label={t('streaks.nutrition')} icon={<Flame size={12} />}
+                                current={streaks.nutrition.current_streak} color="text-amber-400" bg="bg-amber-500/10 border-amber-500/20" />
+                            <MiniStreak label={t('streaks.combined')} icon={<Zap size={12} />}
+                                current={streaks.combined.current_streak} color="text-emerald-400" bg="bg-emerald-500/10 border-emerald-500/20" />
                         </div>
                     )}
 
@@ -1399,6 +1452,58 @@ function MacroCard({ icon, label, text, color, bg }: {
                 <span className="text-xs font-semibold uppercase tracking-wide">{label}</span>
             </div>
             <p className="text-cream-200 text-xs leading-relaxed">{text}</p>
+        </div>
+    );
+}
+
+/* ── Nutrition Gauge (for today's live data) ──────────── */
+function NutritionGauge({ label, icon, current, goal, color, bgColor, unit }: {
+    label: string; icon: React.ReactNode; current: number; goal: number;
+    color: string; bgColor: string; unit: string;
+}) {
+    const pct = goal > 0 ? Math.min(current / goal, 1.2) : 0;
+    const remaining = Math.max(0, goal - current);
+    return (
+        <div className="text-center">
+            <div className={`flex items-center justify-center gap-1 mb-1.5 ${color}`}>
+                {icon}
+                <span className="text-[9px] font-semibold uppercase tracking-wider">{label}</span>
+            </div>
+            {/* Circular progress */}
+            <div className="relative w-12 h-12 mx-auto">
+                <svg className="w-12 h-12 -rotate-90" viewBox="0 0 48 48">
+                    <circle cx="24" cy="24" r="18" fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth="3.5" />
+                    <circle cx="24" cy="24" r="18" fill="none"
+                        className={bgColor}
+                        strokeWidth="3.5"
+                        strokeLinecap="round"
+                        strokeOpacity="0.7"
+                        strokeDasharray={`${Math.min(pct, 1) * 113.1} 113.1`}
+                    />
+                </svg>
+                <span className={`absolute inset-0 flex items-center justify-center text-[9px] font-bold ${color}`}>
+                    {Math.round(current)}
+                </span>
+            </div>
+            <p className="text-[9px] text-dark-400 mt-1">
+                {remaining > 0 ? `${Math.round(remaining)}${unit}` : '✓'}
+            </p>
+        </div>
+    );
+}
+
+/* ── Mini Streak Card (for dashboard) ─────────────────── */
+function MiniStreak({ label, icon, current, color, bg }: {
+    label: string; icon: React.ReactNode; current: number; color: string; bg: string;
+}) {
+    const { t } = useLanguage();
+    return (
+        <div className={`rounded-xl border p-3 flex items-center gap-2.5 ${bg}`}>
+            <div className={`${color}`}>{icon}</div>
+            <div className="min-w-0">
+                <p className={`text-lg font-bold leading-none ${color}`}>{current}</p>
+                <p className="text-[9px] text-dark-400 truncate">{label} {t('streaks.weeks')}</p>
+            </div>
         </div>
     );
 }

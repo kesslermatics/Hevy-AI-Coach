@@ -216,6 +216,75 @@ const translations = {
 
     /* ── Date formatting ──────────────────────────────── */
     'date.locale': { de: 'de-DE', en: 'en-US' },
+
+    /* ── Tab Navigation ───────────────────────────────── */
+    'tabs.dashboard': { de: 'Dashboard', en: 'Dashboard' },
+    'tabs.progress': { de: 'Fortschritt', en: 'Progress' },
+    'tabs.achievements': { de: 'Erfolge', en: 'Achievements' },
+    'tabs.reports': { de: 'Reports', en: 'Reports' },
+
+    /* ── Streaks ──────────────────────────────────────── */
+    'streaks.title': { de: 'Wochen-Streaks', en: 'Weekly Streaks' },
+    'streaks.training': { de: 'Training', en: 'Training' },
+    'streaks.nutrition': { de: 'Ernährung', en: 'Nutrition' },
+    'streaks.combined': { de: 'Gesamt', en: 'Combined' },
+    'streaks.current': { de: 'Aktuell', en: 'Current' },
+    'streaks.longest': { de: 'Längste', en: 'Longest' },
+    'streaks.weeks': { de: 'Wochen', en: 'weeks' },
+
+    /* ── Macro Performance ────────────────────────────── */
+    'macro.title': { de: 'Ernährung ↔ Performance', en: 'Nutrition ↔ Performance' },
+    'macro.subtitle': { de: 'Wie deine Ernährung dein Training beeinflusst', en: 'How your nutrition affects your training' },
+    'macro.noData': { de: 'Noch nicht genug Daten für eine Analyse.', en: 'Not enough data for analysis yet.' },
+    'macro.workoutsAnalyzed': { de: '{n} Workouts analysiert', en: '{n} workouts analyzed' },
+
+    /* ── Progressive Overload ─────────────────────────── */
+    'progress.title': { de: 'Kraftentwicklung', en: 'Strength Progress' },
+    'progress.subtitle': { de: 'Detaillierte Progression pro Übung', en: 'Detailed progression per exercise' },
+    'progress.sessions': { de: '{n} Sessions', en: '{n} sessions' },
+    'progress.noData': { de: 'Keine Übungsdaten vorhanden.', en: 'No exercise data available.' },
+    'progress.e1rm': { de: 'Geschätzte 1RM', en: 'Estimated 1RM' },
+    'progress.volume': { de: 'Volumen', en: 'Volume' },
+    'progress.peak': { de: 'Peak', en: 'Peak' },
+    'progress.change': { de: 'Veränderung', en: 'Change' },
+
+    /* ── Achievements ─────────────────────────────────── */
+    'achievements.title': { de: 'Achievements', en: 'Achievements' },
+    'achievements.subtitle': { de: 'Deine gesammelten Abzeichen', en: 'Your collected badges' },
+    'achievements.unlocked': { de: '{n} freigeschaltet', en: '{n} unlocked' },
+    'achievements.locked': { de: 'Gesperrt', en: 'Locked' },
+    'achievements.training': { de: 'Training', en: 'Training' },
+    'achievements.strength': { de: 'Kraft', en: 'Strength' },
+    'achievements.nutritionCat': { de: 'Ernährung', en: 'Nutrition' },
+    'achievements.consistency': { de: 'Konstanz', en: 'Consistency' },
+    'achievements.body': { de: 'Körper', en: 'Body' },
+
+    /* ── Reports ──────────────────────────────────────── */
+    'reports.title': { de: 'Reports', en: 'Reports' },
+    'reports.weekly': { de: 'Wochenreport', en: 'Weekly Report' },
+    'reports.monthly': { de: 'Monatsreport', en: 'Monthly Report' },
+    'reports.thisWeek': { de: 'Diese Woche', en: 'This week' },
+    'reports.lastWeek': { de: 'Letzte Woche', en: 'Last week' },
+    'reports.thisMonth': { de: 'Dieser Monat', en: 'This month' },
+    'reports.lastMonth': { de: 'Letzter Monat', en: 'Last month' },
+    'reports.workouts': { de: 'Workouts', en: 'Workouts' },
+    'reports.totalVolume': { de: 'Gesamtvolumen', en: 'Total Volume' },
+    'reports.totalSets': { de: 'Sätze gesamt', en: 'Total Sets' },
+    'reports.avgCalories': { de: 'Ø Kalorien', en: 'Avg Calories' },
+    'reports.avgProtein': { de: 'Ø Protein', en: 'Avg Protein' },
+    'reports.daysTracked': { de: 'Tage getrackt', en: 'Days tracked' },
+    'reports.weightChange': { de: 'Gewichtsänderung', en: 'Weight Change' },
+    'reports.vsLastWeek': { de: 'vs. Vorwoche', en: 'vs. last week' },
+    'reports.vsLastMonth': { de: 'vs. Vormonat', en: 'vs. last month' },
+    'reports.noData': { de: 'Keine Daten für diesen Zeitraum.', en: 'No data for this period.' },
+    'reports.duration': { de: 'Trainingsdauer', en: 'Training Duration' },
+    'reports.previous': { de: 'Vorheriger Zeitraum', en: 'Previous period' },
+
+    /* ── Today's Nutrition ────────────────────────────── */
+    'today.title': { de: 'Ernährung heute', en: "Today's Nutrition" },
+    'today.subtitle': { de: 'Aktueller Stand', en: 'Current status' },
+    'today.remaining': { de: 'Noch übrig', en: 'Remaining' },
+    'today.soFar': { de: 'Bisher', en: 'So far' },
 } as const;
 
 export type TranslationKey = keyof typeof translations;
