@@ -103,6 +103,10 @@ export interface NutritionReview {
   protein: string;
   carbs: string;
   fat: string;
+  sugar?: string;
+  fiber?: string;
+  saturated_fat?: string;
+  sodium?: string;
 }
 
 export interface ExerciseHistory {
@@ -150,7 +154,7 @@ export interface BriefingData {
   nutrition_review: NutritionReview;
   workout_suggestion: string;
   weight_trend: string;
-  daily_mission: string;
+  daily_mission?: string;
   weather_note: string;
   muscle_recovery: Record<string, number>;
 }

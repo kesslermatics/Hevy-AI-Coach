@@ -7,7 +7,7 @@ import {
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
     Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus, Scale, MapPin, Activity,
     Zap, ChevronRight, Award, Bell, CheckCircle2, MessageSquare, Send,
-    ChevronDown, ChevronUp, Edit3, Check, ListChecks
+    ChevronDown, ChevronUp, Edit3, Check, ListChecks, Cookie, Leaf, Droplet, FlaskConical
 } from 'lucide-react';
 import MuscleHeatmap from './MuscleHeatmap';
 import ActivityHeatmap from './ActivityHeatmap';
@@ -92,6 +92,9 @@ export default function Dashboard() {
     const [chatInput, setChatInput] = useState('');
     const [chatLoading, setChatLoading] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
+
+    // Recovery heatmap collapsed by default
+    const [recoveryOpen, setRecoveryOpen] = useState(false);
 
     // Get user location on mount, then fetch briefing
     useEffect(() => {
@@ -388,6 +391,43 @@ export default function Dashboard() {
                         </div>
                     </div>
 
+                    {/* ─── Detailed Nutrition (Sugar, Fiber, Saturated Fat, Sodium) ── */}
+                    {(data.nutrition_review.sugar || data.nutrition_review.fiber || data.nutrition_review.saturated_fat || data.nutrition_review.sodium) && (
+                        <div className="card-glass p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-pink-500/10 border-pink-500/30 text-pink-400">
+                                    <FlaskConical className="w-5 h-5" />
+                                </div>
+                                <div>
+                                    <h2 className="text-sm font-semibold text-cream-50">{t('dashboard.detailNutritionTitle')}</h2>
+                                    <p className="text-xs text-dark-300">{t('dashboard.detailNutritionSubtitle')}</p>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                {data.nutrition_review.sugar && (
+                                    <MacroCard icon={<Cookie className="w-4 h-4" />} label={t('dashboard.sugar')}
+                                        text={data.nutrition_review.sugar}
+                                        color="text-pink-400" bg="bg-pink-500/10 border-pink-500/20" />
+                                )}
+                                {data.nutrition_review.fiber && (
+                                    <MacroCard icon={<Leaf className="w-4 h-4" />} label={t('dashboard.fiber')}
+                                        text={data.nutrition_review.fiber}
+                                        color="text-green-400" bg="bg-green-500/10 border-green-500/20" />
+                                )}
+                                {data.nutrition_review.saturated_fat && (
+                                    <MacroCard icon={<Droplet className="w-4 h-4" />} label={t('dashboard.saturatedFat')}
+                                        text={data.nutrition_review.saturated_fat}
+                                        color="text-amber-400" bg="bg-amber-500/10 border-amber-500/20" />
+                                )}
+                                {data.nutrition_review.sodium && (
+                                    <MacroCard icon={<FlaskConical className="w-4 h-4" />} label={t('dashboard.sodium')}
+                                        text={data.nutrition_review.sodium}
+                                        color="text-sky-400" bg="bg-sky-500/10 border-sky-500/20" />
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                     {/* ─── Workout Suggestion ──────────────── */}
                     <div className="card-glass p-6">
                         <div className="flex items-center gap-3 mb-3">
@@ -404,17 +444,27 @@ export default function Dashboard() {
 
                     {/* ─── Muscle Recovery Heatmap ─────────── */}
                     {data.muscle_recovery && Object.keys(data.muscle_recovery).length > 0 && (
-                        <div className="card-glass p-6">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-rose-500/10 border-rose-500/30 text-rose-400">
-                                    <Activity className="w-5 h-5" />
+                        <div className="card-glass overflow-hidden">
+                            <button
+                                onClick={() => setRecoveryOpen(!recoveryOpen)}
+                                className="w-full flex items-center justify-between p-6 cursor-pointer hover:bg-dark-700/20 transition-colors"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-rose-500/10 border-rose-500/30 text-rose-400">
+                                        <Activity className="w-5 h-5" />
+                                    </div>
+                                    <div className="text-left">
+                                        <h3 className="text-sm font-semibold text-cream-50">{t('dashboard.recoveryTitle')}</h3>
+                                        <p className="text-xs text-dark-300">{t('dashboard.recoverySubtitle')}</p>
+                                    </div>
                                 </div>
-                                <div>
-                                    <h3 className="text-sm font-semibold text-cream-50">{t('dashboard.recoveryTitle')}</h3>
-                                    <p className="text-xs text-dark-300">{t('dashboard.recoverySubtitle')}</p>
+                                {recoveryOpen ? <ChevronUp size={16} className="text-dark-300" /> : <ChevronDown size={16} className="text-dark-300" />}
+                            </button>
+                            {recoveryOpen && (
+                                <div className="px-6 pb-6">
+                                    <MuscleHeatmap recovery={data.muscle_recovery} />
                                 </div>
-                            </div>
-                            <MuscleHeatmap recovery={data.muscle_recovery} />
+                            )}
                         </div>
                     )}
 
@@ -502,8 +552,8 @@ export default function Dashboard() {
                                     ) : uniqueWorkoutNames.map(name => (
                                         <button key={name} onClick={() => togglePlanWorkout(name)}
                                             className={`text-xs px-3 py-1.5 rounded-lg border transition-all cursor-pointer ${planDraft.includes(name)
-                                                    ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
-                                                    : 'bg-dark-700/40 border-dark-500/30 text-dark-300 hover:border-dark-400/40'
+                                                ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-300'
+                                                : 'bg-dark-700/40 border-dark-500/30 text-dark-300 hover:border-dark-400/40'
                                                 }`}>
                                             {planDraft.includes(name) && <Check size={10} className="inline mr-1" />}
                                             {name}
@@ -532,17 +582,6 @@ export default function Dashboard() {
                         ) : (
                             <p className="text-xs text-dark-400 italic">{t('plan.empty')}</p>
                         )}
-                    </div>
-
-                    {/* ─── Daily Mission ───────────────────── */}
-                    <div className="card-glass p-6 border-l-4 border-gold-500">
-                        <div className="flex items-center gap-3 mb-3">
-                            <Target className="w-5 h-5 text-gold-400" />
-                            <h3 className="text-sm font-semibold text-cream-50">{t('dashboard.dailyMission')}</h3>
-                        </div>
-                        <p className="text-cream-100 text-sm leading-relaxed italic">
-                            "{data.daily_mission}"
-                        </p>
                     </div>
 
                     {/* ─── Activity Heatmap ────────────────── */}
@@ -580,8 +619,8 @@ export default function Dashboard() {
                                     {chatMessages.map((msg, i) => (
                                         <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                                             <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed ${msg.role === 'user'
-                                                    ? 'bg-blue-500/20 border border-blue-500/30 text-cream-100 rounded-br-md'
-                                                    : 'bg-dark-700/60 border border-dark-500/30 text-cream-200 rounded-bl-md'
+                                                ? 'bg-blue-500/20 border border-blue-500/30 text-cream-100 rounded-br-md'
+                                                : 'bg-dark-700/60 border border-dark-500/30 text-cream-200 rounded-bl-md'
                                                 }`}>
                                                 <div className="whitespace-pre-wrap">{msg.content}</div>
                                             </div>
@@ -1151,8 +1190,8 @@ function ReviewPicker({ reviews, allReviews, trainingPlan, onSelect }: {
                     return (
                         <button key={r.id} onClick={() => onSelect(r)}
                             className={`w-full text-left backdrop-blur-sm rounded-xl border p-4 transition-all cursor-pointer group ${!r.is_read
-                                    ? 'bg-blue-500/10 border-blue-500/30 hover:border-blue-400/50 shadow-lg shadow-blue-500/5'
-                                    : 'bg-dark-700/40 hover:bg-dark-700/60 border-dark-500/30 hover:border-dark-400/30'
+                                ? 'bg-blue-500/10 border-blue-500/30 hover:border-blue-400/50 shadow-lg shadow-blue-500/5'
+                                : 'bg-dark-700/40 hover:bg-dark-700/60 border-dark-500/30 hover:border-dark-400/30'
                                 }`}>
                             <div className="flex items-center justify-between mb-1.5">
                                 <div className="flex items-center gap-2 min-w-0">

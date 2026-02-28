@@ -110,7 +110,10 @@ def _parse_summary(raw: dict) -> dict:
     user_info = raw.get("user", {})
 
     parsed_meals: dict[str, dict] = {}
-    totals = {"calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0}
+    totals = {
+        "calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0,
+        "sugar": 0.0, "fiber": 0.0, "saturated_fat": 0.0, "sodium": 0.0,
+    }
 
     for key in MEAL_KEYS:
         nutrients = meals.get(key, {}).get("nutrients", {})
@@ -118,17 +121,29 @@ def _parse_summary(raw: dict) -> dict:
         prot = nutrients.get("nutrient.protein", 0)
         carb = nutrients.get("nutrient.carb", 0)
         fat  = nutrients.get("nutrient.fat", 0)
+        sugar = nutrients.get("nutrient.sugar", 0)
+        fiber = nutrients.get("nutrient.fiber", 0)
+        sat_fat = nutrients.get("nutrient.saturated_fat", 0)
+        sodium = nutrients.get("nutrient.sodium", 0)
 
         parsed_meals[key] = {
             "calories": round(cal, 1),
             "protein":  round(prot, 1),
             "carbs":    round(carb, 1),
             "fat":      round(fat, 1),
+            "sugar":    round(sugar, 1),
+            "fiber":    round(fiber, 1),
+            "saturated_fat": round(sat_fat, 1),
+            "sodium":   round(sodium, 1),
         }
         totals["calories"] += cal
         totals["protein"]  += prot
         totals["carbs"]    += carb
         totals["fat"]      += fat
+        totals["sugar"]    += sugar
+        totals["fiber"]    += fiber
+        totals["saturated_fat"] += sat_fat
+        totals["sodium"]   += sodium
 
     # Round totals
     totals = {k: round(v, 1) for k, v in totals.items()}
@@ -138,6 +153,10 @@ def _parse_summary(raw: dict) -> dict:
         "protein":  round(goals.get("nutrient.protein", 0), 1),
         "carbs":    round(goals.get("nutrient.carb", 0), 1),
         "fat":      round(goals.get("nutrient.fat", 0), 1),
+        "sugar":    round(goals.get("nutrient.sugar", 0), 1),
+        "fiber":    round(goals.get("nutrient.fiber", 0), 1),
+        "saturated_fat": round(goals.get("nutrient.saturated_fat", 0), 1),
+        "sodium":   round(goals.get("nutrient.sodium", 0), 1),
     }
 
     # Water – might simply be missing

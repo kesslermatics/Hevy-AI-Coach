@@ -22,10 +22,13 @@ FALLBACK_BRIEFING = {
         "protein": "Unable to load protein data.",
         "carbs": "Unable to load carbs data.",
         "fat": "Unable to load fat data.",
+        "sugar": "",
+        "fiber": "",
+        "saturated_fat": "",
+        "sodium": "",
     },
     "workout_suggestion": "Unable to generate workout suggestion — please check your Hevy connection.",
     "weight_trend": "Unable to load weight data.",
-    "daily_mission": "Stay consistent and keep tracking your progress! 💪",
     "weather_note": "",
     "muscle_recovery": {},
 }
@@ -134,16 +137,14 @@ Your job:
 - Do NOT mention data that is clearly missing or zero — just skip it gracefully.
 - Keep it short, warm, and motivating. Use short sentences.
 
-For each macro in nutrition_review, ALWAYS include the actual number and the goal number (e.g. "2100 of 2500 kcal — solid, right on track!").
+For each macro in nutrition_review (calories, protein, carbs, fat), ALWAYS include the actual number and the goal number (e.g. "2100 of 2500 kcal — solid, right on track!").
+For the detailed nutrients (sugar, fiber, saturated_fat, sodium): write a SHORT coaching sentence referencing the actual number and whether it's good or needs attention. If no data or 0, leave the field as an empty string "".
+- **sugar**: Coach on sugar intake. High sugar is usually bad — warn gently. Example: "32g Zucker — pretty clean, nice job!"
+- **fiber**: Coach on fiber. Most people need 25-35g/day. Example: "Only 12g fiber — try adding more veggies and whole grains."
+- **saturated_fat**: Coach on saturated fat. Should be <20g/day for most people. Example: "18g saturated fat — borderline, try to swap some for unsaturated sources."
+- **sodium**: Coach on sodium (value is in mg). Healthy range is 1500-2300mg/day. Example: "2800mg sodium — a bit high, watch the processed foods."
 
 **weight_trend**: Based on the user's current weight, start weight, goal, and target weight change per week, write a short, encouraging summary of their weight journey. Mention current weight, how far they've come from their start weight, how far to their goal, and whether the pace is good. Be specific with numbers. If the user is bulking, frame weight gain positively. If cutting, frame weight loss positively. If no weight data is available, say "No weight data available yet — start tracking to see your progress!"
-
-**daily_mission**: Give ONE very specific, concrete, actionable micro-task for today. NOT generic motivation. Examples:
-- "Eat a banana 30 min before your workout for quick carbs."
-- "Focus on 3-second eccentrics on every bench press rep today."
-- "Add one extra set of lateral raises at the end of your session."
-- "Drink a protein shake within 30 min after training."
-The mission should relate to either today's workout or yesterday's nutrition gaps.
 
 **weather_note**: If weather data is provided, write 1-2 full sentences describing today's weather naturally. Include the current temperature, the expected low and high for the day, and the conditions. Then optionally connect it to the workout. Example: "Right now it's 5°C with light rain — expect lows of 2°C and highs of 8°C today. Perfect excuse to hit the gym instead of running outside!" If no weather data, leave this as an empty string.
 
@@ -161,11 +162,14 @@ You MUST respond with valid JSON matching this exact schema:
     "calories": "<string, ONE short sentence WITH actual/goal numbers>",
     "protein": "<string, ONE short sentence WITH actual/goal grams>",
     "carbs": "<string, ONE short sentence WITH actual/goal grams>",
-    "fat": "<string, ONE short sentence WITH actual/goal grams>"
+    "fat": "<string, ONE short sentence WITH actual/goal grams>",
+    "sugar": "<string, short coaching sentence with actual grams — or empty string if no data>",
+    "fiber": "<string, short coaching sentence with actual grams — or empty string if no data>",
+    "saturated_fat": "<string, short coaching sentence with actual grams — or empty string if no data>",
+    "sodium": "<string, short coaching sentence with actual mg — or empty string if no data>"
   }},
   "workout_suggestion": "<string, 2-3 sentences suggesting today's training focus>",
   "weight_trend": "<string, 2-3 sentences about weight progress with actual numbers>",
-  "daily_mission": "<string, ONE specific actionable micro-task for today>",
   "weather_note": "<string, 1-2 sentences with current temp, daily low/high, conditions, and optional workout connection — or empty string if no weather data>",
   "muscle_recovery": {{
     "chest": <int 0-100>,
@@ -201,10 +205,23 @@ def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -
                      f"P: {totals.get('protein', 0)}g | "
                      f"C: {totals.get('carbs', 0)}g | "
                      f"F: {totals.get('fat', 0)}g")
+        parts.append(f"  Detail: Sugar: {totals.get('sugar', 0)}g | "
+                     f"Fiber: {totals.get('fiber', 0)}g | "
+                     f"Sat. Fat: {totals.get('saturated_fat', 0)}g | "
+                     f"Sodium: {totals.get('sodium', 0)}mg")
         parts.append(f"Goals: {goals.get('calories', 0)} kcal | "
                      f"P: {goals.get('protein', 0)}g | "
                      f"C: {goals.get('carbs', 0)}g | "
                      f"F: {goals.get('fat', 0)}g")
+        goal_sugar = goals.get('sugar', 0)
+        goal_fiber = goals.get('fiber', 0)
+        goal_sat = goals.get('saturated_fat', 0)
+        goal_sod = goals.get('sodium', 0)
+        if any([goal_sugar, goal_fiber, goal_sat, goal_sod]):
+            parts.append(f"  Detail Goals: Sugar: {goal_sugar}g | "
+                         f"Fiber: {goal_fiber}g | "
+                         f"Sat. Fat: {goal_sat}g | "
+                         f"Sodium: {goal_sod}mg")
 
         # Per-meal breakdown (only non-zero)
         for meal_key, meal_vals in meals.items():
@@ -213,7 +230,9 @@ def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -
                 parts.append(f"  {meal_key.title()}: {cal} kcal | "
                              f"P: {meal_vals.get('protein', 0)}g | "
                              f"C: {meal_vals.get('carbs', 0)}g | "
-                             f"F: {meal_vals.get('fat', 0)}g")
+                             f"F: {meal_vals.get('fat', 0)}g | "
+                             f"Sugar: {meal_vals.get('sugar', 0)}g | "
+                             f"Fiber: {meal_vals.get('fiber', 0)}g")
 
         # Water only if tracked
         water = yazio_data.get("water_ml", 0)
@@ -311,7 +330,7 @@ async def generate_daily_briefing(
         parsed = json.loads(cleaned)
 
         # Validate required keys exist
-        required_keys = {"nutrition_review", "workout_suggestion", "daily_mission"}
+        required_keys = {"nutrition_review", "workout_suggestion"}
         if not required_keys.issubset(parsed.keys()):
             missing = required_keys - set(parsed.keys())
             logger.warning("AI response missing keys: %s", missing)
@@ -322,9 +341,10 @@ async def generate_daily_briefing(
         if isinstance(nr, str):
             parsed["nutrition_review"] = {
                 "calories": nr, "protein": "", "carbs": "", "fat": "",
+                "sugar": "", "fiber": "", "saturated_fat": "", "sodium": "",
             }
         elif isinstance(nr, dict):
-            for k in ("calories", "protein", "carbs", "fat"):
+            for k in ("calories", "protein", "carbs", "fat", "sugar", "fiber", "saturated_fat", "sodium"):
                 if k not in nr:
                     nr[k] = ""
 
