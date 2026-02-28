@@ -22,10 +22,6 @@ FALLBACK_BRIEFING = {
         "protein": "Unable to load protein data.",
         "carbs": "Unable to load carbs data.",
         "fat": "Unable to load fat data.",
-        "sugar": "",
-        "fiber": "",
-        "saturated_fat": "",
-        "sodium": "",
     },
     "workout_suggestion": "Unable to generate workout suggestion — please check your Hevy connection.",
     "weight_trend": "Unable to load weight data.",
@@ -138,13 +134,6 @@ Your job:
 - Keep it short, warm, and motivating. Use short sentences.
 
 For each macro in nutrition_review (calories, protein, carbs, fat), ALWAYS include the actual number and the goal number (e.g. "2100 of 2500 kcal — solid, right on track!").
-For the detailed nutrients (sugar, fiber, saturated_fat, sodium): you MUST fill these in whenever nutrition data is available!
-Even if the value seems low, the user wants to see coaching on ALL nutrients. Only leave empty ("") if there is literally NO nutrition data at all (Yazio not connected).
-- **sugar**: Coach on sugar intake. Reference the actual grams. High sugar (>50g) is usually bad — warn gently. Low sugar (<30g) — praise! Example: "32g Zucker — pretty clean, nice job!"
-- **fiber**: Coach on fiber. Most people need 25-35g/day. Low fiber — suggest adding veggies/whole grains. Example: "Only 12g fiber — try adding more veggies and whole grains."
-- **saturated_fat**: Coach on saturated fat. Should be <20g/day for most people. Example: "18g saturated fat — borderline, try to swap some for unsaturated sources."
-- **sodium**: Coach on sodium (value is in mg). Healthy range is 1500-2300mg/day. Example: "2800mg sodium — a bit high, watch the processed foods."
-IMPORTANT: Do NOT leave sugar/fiber/saturated_fat/sodium empty if the user has tracked ANY meals! The data is in the nutrition section — use it!
 
 **weight_trend**: You will receive a WEIGHT HISTORY section with actual daily weight recordings. Use this data to describe the REAL weight trend — mention start/current weights, how many kg gained/lost over what period, and whether the pace matches the user's goal. If the user is bulking, frame weight gain positively. If cutting, frame weight loss positively. Reference actual numbers from the data. If weight history has multiple entries, mention the trend direction (e.g. "steadily going up", "slight dip last week but back on track"). If only 1-2 entries or no data, say "We're just starting to collect your weight data — keep tracking and you'll see your trend here soon!"
 
@@ -164,11 +153,7 @@ You MUST respond with valid JSON matching this exact schema:
     "calories": "<string, ONE short sentence WITH actual/goal numbers>",
     "protein": "<string, ONE short sentence WITH actual/goal grams>",
     "carbs": "<string, ONE short sentence WITH actual/goal grams>",
-    "fat": "<string, ONE short sentence WITH actual/goal grams>",
-    "sugar": "<string, short coaching sentence with actual grams — or empty string if no data>",
-    "fiber": "<string, short coaching sentence with actual grams — or empty string if no data>",
-    "saturated_fat": "<string, short coaching sentence with actual grams — or empty string if no data>",
-    "sodium": "<string, short coaching sentence with actual mg — or empty string if no data>"
+    "fat": "<string, ONE short sentence WITH actual/goal grams>"
   }},
   "workout_suggestion": "<string, 2-3 sentences suggesting today's training focus>",
   "weight_trend": "<string, 2-3 sentences about weight progress with actual numbers>",
@@ -207,23 +192,10 @@ def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -
                      f"P: {totals.get('protein', 0)}g | "
                      f"C: {totals.get('carbs', 0)}g | "
                      f"F: {totals.get('fat', 0)}g")
-        parts.append(f"  Detail: Sugar: {totals.get('sugar', 0)}g | "
-                     f"Fiber: {totals.get('fiber', 0)}g | "
-                     f"Sat. Fat: {totals.get('saturated_fat', 0)}g | "
-                     f"Sodium: {totals.get('sodium', 0)}mg")
         parts.append(f"Goals: {goals.get('calories', 0)} kcal | "
                      f"P: {goals.get('protein', 0)}g | "
                      f"C: {goals.get('carbs', 0)}g | "
                      f"F: {goals.get('fat', 0)}g")
-        goal_sugar = goals.get('sugar', 0)
-        goal_fiber = goals.get('fiber', 0)
-        goal_sat = goals.get('saturated_fat', 0)
-        goal_sod = goals.get('sodium', 0)
-        if any([goal_sugar, goal_fiber, goal_sat, goal_sod]):
-            parts.append(f"  Detail Goals: Sugar: {goal_sugar}g | "
-                         f"Fiber: {goal_fiber}g | "
-                         f"Sat. Fat: {goal_sat}g | "
-                         f"Sodium: {goal_sod}mg")
 
         # Per-meal breakdown (only non-zero)
         for meal_key, meal_vals in meals.items():
@@ -232,9 +204,7 @@ def _build_user_message(yazio_data: Optional[dict], hevy_data: Optional[list]) -
                 parts.append(f"  {meal_key.title()}: {cal} kcal | "
                              f"P: {meal_vals.get('protein', 0)}g | "
                              f"C: {meal_vals.get('carbs', 0)}g | "
-                             f"F: {meal_vals.get('fat', 0)}g | "
-                             f"Sugar: {meal_vals.get('sugar', 0)}g | "
-                             f"Fiber: {meal_vals.get('fiber', 0)}g")
+                             f"F: {meal_vals.get('fat', 0)}g")
 
         # Water only if tracked
         water = yazio_data.get("water_ml", 0)
@@ -357,10 +327,9 @@ async def generate_daily_briefing(
         if isinstance(nr, str):
             parsed["nutrition_review"] = {
                 "calories": nr, "protein": "", "carbs": "", "fat": "",
-                "sugar": "", "fiber": "", "saturated_fat": "", "sodium": "",
             }
         elif isinstance(nr, dict):
-            for k in ("calories", "protein", "carbs", "fat", "sugar", "fiber", "saturated_fat", "sodium"):
+            for k in ("calories", "protein", "carbs", "fat"):
                 if k not in nr:
                     nr[k] = ""
 

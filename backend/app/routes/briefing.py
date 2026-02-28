@@ -526,57 +526,6 @@ async def get_weight_history(
 
 
 # ════════════════════════════════════════════════════════
-#  DEBUG — raw Yazio data (temporary)
-# ════════════════════════════════════════════════════════
-
-@router.get("/debug-yazio")
-async def debug_yazio(
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Return the raw Yazio daily-summary response for debugging nutrient keys.
-    """
-    if not current_user.yazio_email or not current_user.yazio_password:
-        return {"error": "No Yazio credentials"}
-    try:
-        from app.services.yazio_service import fetch_yazio_summary, _yazio_login, _fetch_daily_summary, YAZIO_BASE_URL
-        from datetime import timedelta
-        import httpx
-
-        email = decrypt_value(current_user.yazio_email)
-        password = decrypt_value(current_user.yazio_password)
-        yesterday = (date.today() - timedelta(days=1)).isoformat()
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            token = await _yazio_login(client, email, password)
-            if not token:
-                return {"error": "Login failed"}
-            raw = await _fetch_daily_summary(client, token, yesterday)
-            if not raw:
-                return {"error": "No summary data"}
-
-            # Extract just the nutrient keys from each meal
-            meals = raw.get("meals", {})
-            meal_nutrients = {}
-            for meal_key in ["breakfast", "lunch", "dinner", "snack"]:
-                nutrients = meals.get(meal_key, {}).get("nutrients", {})
-                meal_nutrients[meal_key] = {
-                    "all_keys": sorted(nutrients.keys()),
-                    "values": {k: round(v, 2) if isinstance(v, (int, float)) else v for k, v in nutrients.items()},
-                }
-
-            goals = raw.get("goals", {})
-            return {
-                "date": yesterday,
-                "meal_nutrients": meal_nutrients,
-                "goal_keys": sorted(goals.keys()),
-                "goal_values": {k: round(v, 2) if isinstance(v, (int, float)) else v for k, v in goals.items()},
-            }
-    except Exception as exc:
-        return {"error": str(exc)}
-
-
-# ════════════════════════════════════════════════════════
 #  AI CHAT — conversational coaching
 # ════════════════════════════════════════════════════════
 

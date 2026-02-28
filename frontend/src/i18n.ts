@@ -102,13 +102,6 @@ const translations = {
     'dashboard.carbs': { de: 'Kohlenhydrate', en: 'Carbs' },
     'dashboard.fat': { de: 'Fett', en: 'Fat' },
 
-    'dashboard.detailNutritionTitle': { de: 'Mikronährstoffe', en: 'Detailed Nutrients' },
-    'dashboard.detailNutritionSubtitle': { de: 'Zucker, Ballaststoffe, Fette & Salz', en: 'Sugar, fiber, fats & sodium' },
-    'dashboard.sugar': { de: 'Zucker', en: 'Sugar' },
-    'dashboard.fiber': { de: 'Ballaststoffe', en: 'Fiber' },
-    'dashboard.saturatedFat': { de: 'Gesättigte Fette', en: 'Saturated Fat' },
-    'dashboard.sodium': { de: 'Salz', en: 'Sodium' },
-
     'dashboard.workoutTitle': { de: 'Trainingsvorschlag', en: 'Workout Suggestion' },
     'dashboard.workoutSubtitle': { de: 'Heutiger Trainingsfokus', en: "Today's training focus" },
 

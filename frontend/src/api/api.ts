@@ -103,10 +103,6 @@ export interface NutritionReview {
   protein: string;
   carbs: string;
   fat: string;
-  sugar?: string;
-  fiber?: string;
-  saturated_fat?: string;
-  sodium?: string;
 }
 
 export interface ExerciseHistory {

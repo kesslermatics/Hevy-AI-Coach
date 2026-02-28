@@ -7,7 +7,7 @@ import {
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
     Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus, Scale, MapPin, Activity,
     Zap, ChevronRight, Award, Bell, CheckCircle2, MessageSquare, Send,
-    ChevronDown, ChevronUp, Edit3, Check, ListChecks, Cookie, Leaf, Droplet, FlaskConical
+    ChevronDown, ChevronUp, Edit3, Check, ListChecks
 } from 'lucide-react';
 import MuscleHeatmap from './MuscleHeatmap';
 import ActivityHeatmap from './ActivityHeatmap';
@@ -393,43 +393,6 @@ export default function Dashboard() {
                                 color="text-emerald-400" bg="bg-emerald-500/10 border-emerald-500/20" />
                         </div>
                     </div>
-
-                    {/* ─── Detailed Nutrition (Sugar, Fiber, Saturated Fat, Sodium) ── */}
-                    {(data.nutrition_review.sugar || data.nutrition_review.fiber || data.nutrition_review.saturated_fat || data.nutrition_review.sodium) && (
-                        <div className="card-glass p-6">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-pink-500/10 border-pink-500/30 text-pink-400">
-                                    <FlaskConical className="w-5 h-5" />
-                                </div>
-                                <div>
-                                    <h2 className="text-sm font-semibold text-cream-50">{t('dashboard.detailNutritionTitle')}</h2>
-                                    <p className="text-xs text-dark-300">{t('dashboard.detailNutritionSubtitle')}</p>
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {data.nutrition_review.sugar && (
-                                    <MacroCard icon={<Cookie className="w-4 h-4" />} label={t('dashboard.sugar')}
-                                        text={data.nutrition_review.sugar}
-                                        color="text-pink-400" bg="bg-pink-500/10 border-pink-500/20" />
-                                )}
-                                {data.nutrition_review.fiber && (
-                                    <MacroCard icon={<Leaf className="w-4 h-4" />} label={t('dashboard.fiber')}
-                                        text={data.nutrition_review.fiber}
-                                        color="text-green-400" bg="bg-green-500/10 border-green-500/20" />
-                                )}
-                                {data.nutrition_review.saturated_fat && (
-                                    <MacroCard icon={<Droplet className="w-4 h-4" />} label={t('dashboard.saturatedFat')}
-                                        text={data.nutrition_review.saturated_fat}
-                                        color="text-amber-400" bg="bg-amber-500/10 border-amber-500/20" />
-                                )}
-                                {data.nutrition_review.sodium && (
-                                    <MacroCard icon={<FlaskConical className="w-4 h-4" />} label={t('dashboard.sodium')}
-                                        text={data.nutrition_review.sodium}
-                                        color="text-sky-400" bg="bg-sky-500/10 border-sky-500/20" />
-                                )}
-                            </div>
-                        </div>
-                    )}
 
                     {/* ─── Workout Suggestion ──────────────── */}
                     <div className="card-glass p-6">

@@ -58,60 +58,6 @@ async def _fetch_daily_summary(client: httpx.AsyncClient, token: str, target_dat
         return None
 
 
-async def _fetch_consumed_items(client: httpx.AsyncClient, token: str, target_date: str) -> Optional[list]:
-    """
-    Probe multiple Yazio endpoints for detailed nutrient data (sugar, fiber, etc.).
-    The daily-summary widget only has 4 basic nutrients.
-    """
-    headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
-
-    # Round 2: more endpoint guesses based on common Yazio API patterns
-    endpoints = [
-        f"{YAZIO_BASE_URL}/user/consumed-items",
-        f"{YAZIO_BASE_URL}/user/tracker/items",
-        f"{YAZIO_BASE_URL}/user/tracker",
-        f"{YAZIO_BASE_URL}/user/diary/items",
-        f"{YAZIO_BASE_URL}/user/diary/meals",
-        f"{YAZIO_BASE_URL}/user/meals",
-        f"{YAZIO_BASE_URL}/user/food/consumed",
-        f"{YAZIO_BASE_URL}/user/nutrient-details",
-        f"{YAZIO_BASE_URL}/user/widgets/nutrient-details",
-        f"{YAZIO_BASE_URL}/user/widgets/nutrition",
-    ]
-
-    for endpoint in endpoints:
-        try:
-            resp = await client.get(endpoint, headers=headers, params={"date": target_date})
-            short = endpoint.split("/v15/")[-1]
-            logger.info("Yazio probe %s → HTTP %s (size: %d bytes)", short, resp.status_code, len(resp.content))
-            if resp.status_code == 200:
-                data = resp.json()
-                # Log the response structure
-                if isinstance(data, list):
-                    logger.info("Yazio %s returned list of %d items", short, len(data))
-                    if len(data) > 0 and isinstance(data[0], dict):
-                        logger.info("Yazio %s item[0] keys: %s", short, sorted(data[0].keys()))
-                        if "nutrients" in data[0]:
-                            logger.info("Yazio %s nutrients keys: %s", short, sorted(data[0]["nutrients"].keys()))
-                elif isinstance(data, dict):
-                    logger.info("Yazio %s returned dict keys: %s", short, sorted(data.keys()))
-                    # Check nested structures
-                    for sub_key in ["items", "consumed", "entries", "data", "meals", "nutrients", "details"]:
-                        if sub_key in data:
-                            sub = data[sub_key]
-                            logger.info("Yazio %s.%s type=%s len=%s", short, sub_key, type(sub).__name__,
-                                        len(sub) if isinstance(sub, (list, dict)) else "?")
-                            if isinstance(sub, list) and len(sub) > 0 and isinstance(sub[0], dict):
-                                logger.info("Yazio %s.%s[0] keys: %s", short, sub_key, sorted(sub[0].keys()))
-                            elif isinstance(sub, dict):
-                                logger.info("Yazio %s.%s keys: %s", short, sub_key, sorted(sub.keys()))
-        except Exception as exc:
-            logger.debug("Yazio probe %s failed: %s", endpoint, exc)
-
-    # Also log full meal structure from daily-summary to check for nested items
-    return None
-
-
 async def _fetch_user_profile(client: httpx.AsyncClient, token: str) -> Optional[dict]:
     """Fetch the full Yazio user profile (/v15/user)."""
     try:
@@ -166,60 +112,27 @@ def _parse_summary(raw: dict) -> dict:
     parsed_meals: dict[str, dict] = {}
     totals = {
         "calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0,
-        "sugar": 0.0, "fiber": 0.0, "saturated_fat": 0.0, "sodium": 0.0,
     }
 
-    _logged_keys = False
     for key in MEAL_KEYS:
         meal_data = meals.get(key, {})
         nutrients = meal_data.get("nutrients", {})
-
-        # Log full meal structure (once) to find nested items
-        if not _logged_keys and meal_data:
-            logger.info("Yazio meal '%s' top-level keys: %s", key, sorted(meal_data.keys()))
-            if "items" in meal_data:
-                items = meal_data["items"]
-                logger.info("Yazio meal '%s' has %d items", key, len(items) if isinstance(items, list) else -1)
-                if isinstance(items, list) and len(items) > 0 and isinstance(items[0], dict):
-                    logger.info("Yazio meal item[0] keys: %s", sorted(items[0].keys()))
-                    if "nutrients" in items[0]:
-                        logger.info("Yazio meal item nutrients keys: %s", sorted(items[0]["nutrients"].keys()))
-            _logged_keys = True
-
-        # Log ALL nutrient keys + values for every meal so we can find the right keys
-        if nutrients:
-            logger.info("Yazio RAW nutrients for '%s': %s", key,
-                        {k: round(v, 2) if isinstance(v, (int, float)) else v for k, v in nutrients.items()})
-            if not _logged_keys:
-                _logged_keys = True
 
         cal  = nutrients.get("energy.energy", 0)
         prot = nutrients.get("nutrient.protein", 0)
         carb = nutrients.get("nutrient.carb", 0)
         fat  = nutrients.get("nutrient.fat", 0)
-        sugar = nutrients.get("nutrient.sugar", 0)
-        fiber = nutrients.get("nutrient.fiber", 0)
-        sat_fat = nutrients.get("nutrient.saturated_fat", 0)
-        sodium = nutrients.get("nutrient.sodium", 0)
 
         parsed_meals[key] = {
             "calories": round(cal, 1),
             "protein":  round(prot, 1),
             "carbs":    round(carb, 1),
             "fat":      round(fat, 1),
-            "sugar":    round(sugar, 1),
-            "fiber":    round(fiber, 1),
-            "saturated_fat": round(sat_fat, 1),
-            "sodium":   round(sodium, 1),
         }
         totals["calories"] += cal
         totals["protein"]  += prot
         totals["carbs"]    += carb
         totals["fat"]      += fat
-        totals["sugar"]    += sugar
-        totals["fiber"]    += fiber
-        totals["saturated_fat"] += sat_fat
-        totals["sodium"]   += sodium
 
     # Round totals
     totals = {k: round(v, 1) for k, v in totals.items()}
@@ -229,10 +142,6 @@ def _parse_summary(raw: dict) -> dict:
         "protein":  round(goals.get("nutrient.protein", 0), 1),
         "carbs":    round(goals.get("nutrient.carb", 0), 1),
         "fat":      round(goals.get("nutrient.fat", 0), 1),
-        "sugar":    round(goals.get("nutrient.sugar", 0), 1),
-        "fiber":    round(goals.get("nutrient.fiber", 0), 1),
-        "saturated_fat": round(goals.get("nutrient.saturated_fat", 0), 1),
-        "sodium":   round(goals.get("nutrient.sodium", 0), 1),
     }
 
     # Water – might simply be missing
@@ -277,9 +186,6 @@ async def fetch_yazio_summary(email: str, password: str, target_date: Optional[d
 
         # Fetch full user profile for name, height, goal, diet etc.
         raw_profile = await _fetch_user_profile(client, token)
-
-        # Probe consumed-items endpoints for detailed nutrients (sugar, fiber, etc.)
-        consumed_items = await _fetch_consumed_items(client, token, date_str)
 
     result = _parse_summary(raw)
 
