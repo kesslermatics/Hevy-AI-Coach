@@ -60,48 +60,55 @@ async def _fetch_daily_summary(client: httpx.AsyncClient, token: str, target_dat
 
 async def _fetch_consumed_items(client: httpx.AsyncClient, token: str, target_date: str) -> Optional[list]:
     """
-    Fetch individual consumed food items for a date.
-    These contain full nutrient breakdowns (sugar, fiber, saturated fat, sodium, etc.)
-    unlike the daily-summary widget which only has the 4 basics.
+    Probe multiple Yazio endpoints for detailed nutrient data (sugar, fiber, etc.).
+    The daily-summary widget only has 4 basic nutrients.
     """
     headers = {"Authorization": f"Bearer {token}", "Accept": "application/json"}
 
-    # Try multiple possible endpoints for consumed items
+    # Round 2: more endpoint guesses based on common Yazio API patterns
     endpoints = [
-        f"{YAZIO_BASE_URL}/user/consumed",
-        f"{YAZIO_BASE_URL}/user/tracker/consumed",
-        f"{YAZIO_BASE_URL}/user/diary/consumed",
-        f"{YAZIO_BASE_URL}/user/food-diary",
-        f"{YAZIO_BASE_URL}/user/diary",
+        f"{YAZIO_BASE_URL}/user/consumed-items",
+        f"{YAZIO_BASE_URL}/user/tracker/items",
+        f"{YAZIO_BASE_URL}/user/tracker",
+        f"{YAZIO_BASE_URL}/user/diary/items",
+        f"{YAZIO_BASE_URL}/user/diary/meals",
+        f"{YAZIO_BASE_URL}/user/meals",
+        f"{YAZIO_BASE_URL}/user/food/consumed",
+        f"{YAZIO_BASE_URL}/user/nutrient-details",
+        f"{YAZIO_BASE_URL}/user/widgets/nutrient-details",
+        f"{YAZIO_BASE_URL}/user/widgets/nutrition",
     ]
 
     for endpoint in endpoints:
         try:
             resp = await client.get(endpoint, headers=headers, params={"date": target_date})
-            logger.info("Yazio probe %s → HTTP %s (size: %d bytes)",
-                        endpoint.split("/v15/")[-1], resp.status_code, len(resp.content))
+            short = endpoint.split("/v15/")[-1]
+            logger.info("Yazio probe %s → HTTP %s (size: %d bytes)", short, resp.status_code, len(resp.content))
             if resp.status_code == 200:
                 data = resp.json()
-                # Log a sample of the response structure
-                if isinstance(data, list) and len(data) > 0:
-                    sample = data[0]
-                    logger.info("Yazio consumed item sample keys: %s", list(sample.keys()) if isinstance(sample, dict) else type(sample))
-                    if isinstance(sample, dict) and "nutrients" in sample:
-                        logger.info("Yazio consumed item nutrient keys: %s", list(sample["nutrients"].keys()))
-                    return data
+                # Log the response structure
+                if isinstance(data, list):
+                    logger.info("Yazio %s returned list of %d items", short, len(data))
+                    if len(data) > 0 and isinstance(data[0], dict):
+                        logger.info("Yazio %s item[0] keys: %s", short, sorted(data[0].keys()))
+                        if "nutrients" in data[0]:
+                            logger.info("Yazio %s nutrients keys: %s", short, sorted(data[0]["nutrients"].keys()))
                 elif isinstance(data, dict):
-                    logger.info("Yazio consumed response keys: %s", list(data.keys()))
-                    # Could be wrapped in a container
-                    items = data.get("items") or data.get("consumed") or data.get("entries") or data.get("data")
-                    if isinstance(items, list) and len(items) > 0:
-                        sample = items[0]
-                        logger.info("Yazio consumed nested item keys: %s", list(sample.keys()) if isinstance(sample, dict) else type(sample))
-                        if isinstance(sample, dict) and "nutrients" in sample:
-                            logger.info("Yazio consumed nested nutrient keys: %s", list(sample["nutrients"].keys()))
-                        return items
+                    logger.info("Yazio %s returned dict keys: %s", short, sorted(data.keys()))
+                    # Check nested structures
+                    for sub_key in ["items", "consumed", "entries", "data", "meals", "nutrients", "details"]:
+                        if sub_key in data:
+                            sub = data[sub_key]
+                            logger.info("Yazio %s.%s type=%s len=%s", short, sub_key, type(sub).__name__,
+                                        len(sub) if isinstance(sub, (list, dict)) else "?")
+                            if isinstance(sub, list) and len(sub) > 0 and isinstance(sub[0], dict):
+                                logger.info("Yazio %s.%s[0] keys: %s", short, sub_key, sorted(sub[0].keys()))
+                            elif isinstance(sub, dict):
+                                logger.info("Yazio %s.%s keys: %s", short, sub_key, sorted(sub.keys()))
         except Exception as exc:
             logger.debug("Yazio probe %s failed: %s", endpoint, exc)
 
+    # Also log full meal structure from daily-summary to check for nested items
     return None
 
 
@@ -164,7 +171,20 @@ def _parse_summary(raw: dict) -> dict:
 
     _logged_keys = False
     for key in MEAL_KEYS:
-        nutrients = meals.get(key, {}).get("nutrients", {})
+        meal_data = meals.get(key, {})
+        nutrients = meal_data.get("nutrients", {})
+
+        # Log full meal structure (once) to find nested items
+        if not _logged_keys and meal_data:
+            logger.info("Yazio meal '%s' top-level keys: %s", key, sorted(meal_data.keys()))
+            if "items" in meal_data:
+                items = meal_data["items"]
+                logger.info("Yazio meal '%s' has %d items", key, len(items) if isinstance(items, list) else -1)
+                if isinstance(items, list) and len(items) > 0 and isinstance(items[0], dict):
+                    logger.info("Yazio meal item[0] keys: %s", sorted(items[0].keys()))
+                    if "nutrients" in items[0]:
+                        logger.info("Yazio meal item nutrients keys: %s", sorted(items[0]["nutrients"].keys()))
+            _logged_keys = True
 
         # Log ALL nutrient keys + values for every meal so we can find the right keys
         if nutrients:
