@@ -415,14 +415,14 @@ async def get_workout_tips(
         .order_by(WorkoutReview.workout_date.desc())
         .first()
     )
-    if existing and existing.tips_data:
-        # Mark as read
+    if existing and existing.tips_data and "exercise_targets" in existing.tips_data:
+        # Only use cached tips if they match the new schema (exercise_targets)
         if not existing.is_read:
             existing.is_read = True
             db.commit()
         return existing.tips_data
 
-    # No pre-generated tips — generate live with coaching memory (last 3)
+    # No pre-generated tips (or old schema) — generate live with coaching memory (last 3)
     previous_reviews = (
         db.query(WorkoutReview)
         .filter(

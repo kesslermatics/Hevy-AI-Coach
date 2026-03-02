@@ -5,7 +5,7 @@ import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutTips
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
-    Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus, Scale, MapPin, Activity,
+    Trophy, Crosshair, Star, X, ArrowLeft, Plus, Scale, MapPin, Activity,
     Zap, ChevronRight, Award, MessageSquare, Send,
     ChevronDown, ChevronUp, Edit3, Check, ListChecks
 } from 'lucide-react';
