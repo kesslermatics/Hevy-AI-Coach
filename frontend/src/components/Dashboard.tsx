@@ -1,12 +1,12 @@
 import { useEffect, useState, useRef } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips, getWeather, getWorkoutReviews, getUnreadCount, markReviewRead, saveTrainingPlan, sendChatMessage, getWeightHistory, getTodayNutrition, getStreaks } from '../api/api';
-import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutListItem, WorkoutTips, WeatherData, WorkoutReviewItem, ChatMessage, WeightHistoryEntry, TodayNutrition, StreaksData } from '../api/api';
+import { getTodayBriefing, regenerateBriefing, getSessionReview, getWorkoutList, getWorkoutTips, getWeather, saveTrainingPlan, sendChatMessage, getWeightHistory, getTodayNutrition, getStreaks } from '../api/api';
+import type { UserInfo, Briefing, SessionReviewData, ExerciseReview, WorkoutTips, WeatherData, ChatMessage, WeightHistoryEntry, TodayNutrition, StreaksData } from '../api/api';
 import {
     Dumbbell, UtensilsCrossed, Target, RefreshCw, Loader2, Sunrise,
     Flame, Beef, Wheat, Droplets, TrendingUp, TrendingDown, Minus, Sparkles,
     Trophy, Crosshair, Star, X, ArrowLeft, Clock, Plus, Scale, MapPin, Activity,
-    Zap, ChevronRight, Award, Bell, CheckCircle2, MessageSquare, Send,
+    Zap, ChevronRight, Award, MessageSquare, Send,
     ChevronDown, ChevronUp, Edit3, Check, ListChecks
 } from 'lucide-react';
 import MuscleHeatmap from './MuscleHeatmap';
@@ -74,19 +74,10 @@ export default function Dashboard() {
     const [sessionLoading, setSessionLoading] = useState(false);
     const [sessionError, setSessionError] = useState<string | null>(null);
 
-    // Next Session (workout picker) state
-    const [workoutList, setWorkoutList] = useState<WorkoutListItem[] | null>(null);
-    const [workoutsLoading, setWorkoutsLoading] = useState(false);
+    // Next Session (workout tips) state
     const [selectedWorkoutTips, setSelectedWorkoutTips] = useState<WorkoutTips | null>(null);
     const [tipsLoading, setTipsLoading] = useState(false);
     const [tipsError, setTipsError] = useState<string | null>(null);
-
-    // Pre-generated workout reviews (from scheduler)
-    const [workoutReviews, setWorkoutReviews] = useState<WorkoutReviewItem[] | null>(null);
-    const [reviewsLoading, setReviewsLoading] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
-    const [selectedReview, setSelectedReview] = useState<WorkoutReviewItem | null>(null);
-    const [syncing, setSyncing] = useState(false);
 
     // Training plan state
     const [trainingPlan, setTrainingPlan] = useState<string[]>(user?.training_plan || []);
@@ -146,9 +137,8 @@ export default function Dashboard() {
         }
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Fetch unread review count + weight history + today nutrition + streaks on mount
+    // Fetch weight history + today nutrition + streaks on mount
     useEffect(() => {
-        getUnreadCount().then(d => setUnreadCount(d.unread_count)).catch(() => { });
         getWeightHistory(90).then(d => setWeightHistory(d.entries)).catch(() => { });
         getTodayNutrition().then(setTodayNutrition).catch(() => { });
         getStreaks().then(setStreaks).catch(() => { });
@@ -190,39 +180,15 @@ export default function Dashboard() {
                 setSessionLoading(false);
             }
         }
-        if (tab === 'next') {
-            // Fetch pre-generated reviews from DB
-            if (!workoutReviews) {
-                setReviewsLoading(true);
-                try {
-                    const reviews = await getWorkoutReviews();
-                    setWorkoutReviews(reviews);
-                } catch {
-                    // Fallback to old workout list
-                }
-                setReviewsLoading(false);
-            }
-            // Also fetch old workout list as fallback
-            if (!workoutList) {
-                setWorkoutsLoading(true);
-                try {
-                    const list = await getWorkoutList();
-                    setWorkoutList(list);
-                } catch {
-                    // silently fail — empty list shown
-                } finally {
-                    setWorkoutsLoading(false);
-                }
-            }
-        }
+        // For 'next' tab: training plan tiles are shown directly, no data fetch needed
     };
 
-    const handleSelectWorkout = async (index: number) => {
+    const handleSelectWorkout = async (workoutName: string) => {
         setTipsLoading(true);
         setTipsError(null);
         setSelectedWorkoutTips(null);
         try {
-            const tips = await getWorkoutTips(index);
+            const tips = await getWorkoutTips(workoutName);
             setSelectedWorkoutTips(tips);
         } catch (err: any) {
             setTipsError(err.message || 'Failed to load tips');
@@ -234,39 +200,7 @@ export default function Dashboard() {
     const closeModal = () => {
         setModalOpen(null);
         setSelectedWorkoutTips(null);
-        setSelectedReview(null);
         setTipsError(null);
-    };
-
-    const handleSelectReview = async (review: WorkoutReviewItem) => {
-        setSelectedReview(review);
-        if (review.tips_data) {
-            setSelectedWorkoutTips(review.tips_data);
-        }
-        // Mark as read
-        if (!review.is_read) {
-            review.is_read = true;
-            setUnreadCount(prev => Math.max(0, prev - 1));
-            markReviewRead(review.id).catch(() => { });
-        }
-    };
-
-    const handleSyncReviews = async () => {
-        setSyncing(true);
-        try {
-            // Refresh reviews list and unread count
-            const [reviews, unread] = await Promise.all([
-                getWorkoutReviews(),
-                getUnreadCount(),
-            ]);
-            setWorkoutReviews(reviews);
-            setUnreadCount(unread.unread_count);
-            // If we're in the modal, it will show the updated list
-        } catch {
-            // silently fail
-        } finally {
-            setSyncing(false);
-        }
     };
 
     const handleEditPlan = async () => {
@@ -541,29 +475,11 @@ export default function Dashboard() {
 
                         <button onClick={() => openSessionModal('next')}
                             className="card-glass p-5 text-left hover:border-blue-500/40 transition-all duration-200 group cursor-pointer relative">
-                            {unreadCount > 0 && (
-                                <span className="absolute -top-2 -right-2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 text-white text-[10px] font-bold shadow-lg shadow-rose-500/30 animate-pulse z-10">
-                                    <Bell size={10} />
-                                    {unreadCount} {t('dashboard.newReviews')}
-                                </span>
-                            )}
                             <div className="w-10 h-10 rounded-xl bg-blue-500/15 border border-blue-500/30 flex items-center justify-center mb-3 group-hover:scale-105 transition-transform">
                                 <Crosshair className="w-5 h-5 text-blue-400" />
                             </div>
                             <h3 className="text-sm font-semibold text-cream-50 mb-1">{t('dashboard.workoutTips')}</h3>
                             <p className="text-xs text-dark-300">{t('dashboard.workoutTipsDesc')}</p>
-                        </button>
-                    </div>
-
-                    {/* Sync button */}
-                    <div className="flex justify-end -mt-2">
-                        <button
-                            onClick={handleSyncReviews}
-                            disabled={syncing}
-                            className="flex items-center gap-1.5 text-xs text-dark-300 hover:text-blue-400 transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                            <RefreshCw size={12} className={syncing ? 'animate-spin' : ''} />
-                            {syncing ? t('dashboard.syncingReviews') : t('dashboard.syncReviews')}
                         </button>
                     </div>
 
@@ -714,22 +630,16 @@ export default function Dashboard() {
             {modalOpen && (
                 <SessionModal
                     tab={modalOpen}
-                    onTabChange={(t) => { setSelectedWorkoutTips(null); setSelectedReview(null); setTipsError(null); openSessionModal(t); }}
+                    onTabChange={(t) => { setSelectedWorkoutTips(null); setTipsError(null); openSessionModal(t); }}
                     onClose={closeModal}
                     sessionData={sessionReview}
                     sessionLoading={sessionLoading}
                     sessionError={sessionError}
-                    workoutList={workoutList}
-                    workoutsLoading={workoutsLoading}
-                    workoutReviews={workoutReviews}
-                    reviewsLoading={reviewsLoading}
-                    selectedReview={selectedReview}
                     selectedWorkoutTips={selectedWorkoutTips}
                     tipsLoading={tipsLoading}
                     tipsError={tipsError}
                     onSelectWorkout={handleSelectWorkout}
-                    onSelectReview={handleSelectReview}
-                    onBackToList={() => { setSelectedWorkoutTips(null); setSelectedReview(null); setTipsError(null); }}
+                    onBackToList={() => { setSelectedWorkoutTips(null); setTipsError(null); }}
                     onRetrySession={() => {
                         setSessionReview(null);
                         openSessionModal('last');
@@ -746,25 +656,18 @@ export default function Dashboard() {
    ═══════════════════════════════════════════════════════ */
 
 function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, sessionError,
-    workoutList, workoutsLoading, workoutReviews, reviewsLoading, selectedReview,
     selectedWorkoutTips, tipsLoading, tipsError,
-    onSelectWorkout, onSelectReview, onBackToList, onRetrySession, trainingPlan }: {
+    onSelectWorkout, onBackToList, onRetrySession, trainingPlan }: {
         tab: 'last' | 'next';
         onTabChange: (t: 'last' | 'next') => void;
         onClose: () => void;
         sessionData: SessionReviewData | null;
         sessionLoading: boolean;
         sessionError: string | null;
-        workoutList: WorkoutListItem[] | null;
-        workoutsLoading: boolean;
-        workoutReviews: WorkoutReviewItem[] | null;
-        reviewsLoading: boolean;
-        selectedReview: WorkoutReviewItem | null;
         selectedWorkoutTips: WorkoutTips | null;
         tipsLoading: boolean;
         tipsError: string | null;
-        onSelectWorkout: (index: number) => void;
-        onSelectReview: (review: WorkoutReviewItem) => void;
+        onSelectWorkout: (workoutName: string) => void;
         onBackToList: () => void;
         onRetrySession: () => void;
         trainingPlan: string[];
@@ -819,30 +722,17 @@ function SessionModal({ tab, onTabChange, onClose, sessionData, sessionLoading, 
                     )}
                     {tab === 'next' && (
                         <>
-                            {selectedReview || selectedWorkoutTips ? (
-                                /* Show tips for a selected review */
-                                selectedWorkoutTips ? (
-                                    <WorkoutTipsContent tips={selectedWorkoutTips} onBack={onBackToList} />
-                                ) : tipsLoading ? (
-                                    <ModalLoader text={t('modal.generatingTips')} />
-                                ) : tipsError ? (
-                                    <ModalError message={tipsError} onRetry={onBackToList} />
-                                ) : null
-                            ) : reviewsLoading || workoutsLoading ? (
-                                <ModalLoader text={t('modal.loadingWorkouts')} />
-                            ) : workoutReviews && workoutReviews.length > 0 ? (
-                                /* Show pre-generated reviews list — filtered by training plan if set */
-                                <ReviewPicker
-                                    reviews={trainingPlan.length > 0
-                                        ? workoutReviews.filter(r => trainingPlan.includes(r.workout_name))
-                                        : workoutReviews}
-                                    allReviews={workoutReviews}
-                                    trainingPlan={trainingPlan}
-                                    onSelect={onSelectReview}
-                                />
+                            {selectedWorkoutTips ? (
+                                <WorkoutTipsContent tips={selectedWorkoutTips} onBack={onBackToList} />
+                            ) : tipsLoading ? (
+                                <ModalLoader text={t('modal.generatingTips')} />
+                            ) : tipsError ? (
+                                <ModalError message={tipsError} onRetry={onBackToList} />
                             ) : (
-                                /* Fallback to old workout list */
-                                <WorkoutPicker workouts={workoutList || []} onSelect={onSelectWorkout} />
+                                <TrainingPlanPicker
+                                    trainingPlan={trainingPlan}
+                                    onSelect={onSelectWorkout}
+                                />
                             )}
                         </>
                     )}
@@ -1186,142 +1076,47 @@ function E1rmChart({ history, currentE1rm, isPr }: {
     );
 }
 
-/* ── Review Picker (pre-generated reviews from scheduler) ── */
+/* ── Training Plan Picker (workout tiles from training plan) ── */
 
-function ReviewPicker({ reviews, allReviews, trainingPlan, onSelect }: {
-    reviews: WorkoutReviewItem[];
-    allReviews: WorkoutReviewItem[];
+function TrainingPlanPicker({ trainingPlan, onSelect }: {
     trainingPlan: string[];
-    onSelect: (review: WorkoutReviewItem) => void;
-}) {
-    const { t, lang } = useLanguage();
-    const [showAll, setShowAll] = useState(false);
-
-    const displayReviews = showAll ? allReviews : reviews;
-    const hasFilter = trainingPlan.length > 0 && allReviews.length !== reviews.length;
-
-    if (displayReviews.length === 0) {
-        return <p className="text-dark-300 text-sm text-center py-8">{t('picker.noReviews')}</p>;
-    }
-
-    return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h3 className="text-lg font-semibold text-cream-50">{t('picker.title')}</h3>
-                    <p className="text-xs text-dark-300 mt-0.5">{t('picker.subtitle')}</p>
-                </div>
-                {hasFilter && (
-                    <button onClick={() => setShowAll(!showAll)}
-                        className="text-[10px] text-dark-300 hover:text-cream-100 transition-colors cursor-pointer px-2 py-1 rounded-lg bg-dark-700/40 border border-dark-500/20">
-                        {showAll ? t('picker.showPlanOnly') : t('picker.showAll')}
-                    </button>
-                )}
-            </div>
-            <div className="space-y-2">
-                {displayReviews.map((r) => {
-                    // Extract exercise names from review data
-                    const exercises: string[] = [];
-                    const ls = r.review_data?.last_session;
-                    if (ls && typeof ls === 'object' && 'exercises' in ls) {
-                        (ls as any).exercises?.forEach((ex: any) => {
-                            if (ex.name) exercises.push(ex.name);
-                        });
-                    }
-                    // Count PRs
-                    const prCount = (ls as any)?.exercises?.filter((ex: any) => ex.is_pr)?.length || 0;
-
-                    return (
-                        <button key={r.id} onClick={() => onSelect(r)}
-                            className={`w-full text-left backdrop-blur-sm rounded-xl border p-4 transition-all cursor-pointer group ${!r.is_read
-                                ? 'bg-blue-500/10 border-blue-500/30 hover:border-blue-400/50 shadow-lg shadow-blue-500/5'
-                                : 'bg-dark-700/40 hover:bg-dark-700/60 border-dark-500/30 hover:border-dark-400/30'
-                                }`}>
-                            <div className="flex items-center justify-between mb-1.5">
-                                <div className="flex items-center gap-2 min-w-0">
-                                    <span className="text-sm font-medium text-cream-50 group-hover:text-blue-300 transition-colors truncate">
-                                        {r.workout_name}
-                                    </span>
-                                    {!r.is_read && (
-                                        <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-rose-500 to-pink-500 text-[9px] font-bold text-white uppercase tracking-wider">
-                                            {t('picker.new')}
-                                        </span>
-                                    )}
-                                    {prCount > 0 && (
-                                        <span className="shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-300">
-                                            🔥 {prCount} PR{prCount > 1 ? 's' : ''}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-2 text-[11px] text-dark-400 shrink-0">
-                                    {r.has_tips && (
-                                        <span className="flex items-center gap-1 text-emerald-400">
-                                            <CheckCircle2 size={10} />
-                                            <span>{t('picker.reviewed')}</span>
-                                        </span>
-                                    )}
-                                    <span>{formatSessionDate(r.workout_date, lang).split('•')[0].trim()}</span>
-                                </div>
-                            </div>
-                            {exercises.length > 0 && (
-                                <div className="flex flex-wrap gap-1.5">
-                                    {exercises.slice(0, 5).map((name, i) => (
-                                        <span key={i} className="text-[10px] text-dark-300 bg-dark-600/50 px-2 py-0.5 rounded-full">
-                                            {name}
-                                        </span>
-                                    ))}
-                                    {exercises.length > 5 && (
-                                        <span className="text-[10px] text-dark-400 px-2 py-0.5">+{exercises.length - 5}</span>
-                                    )}
-                                </div>
-                            )}
-                        </button>
-                    );
-                })}
-            </div>
-        </div>
-    );
-}
-
-/* ── Workout Picker (list of workouts to choose from) ── */
-
-function WorkoutPicker({ workouts, onSelect }: {
-    workouts: WorkoutListItem[];
-    onSelect: (index: number) => void;
+    onSelect: (workoutName: string) => void;
 }) {
     const { t } = useLanguage();
-    if (workouts.length === 0) {
-        return <p className="text-dark-300 text-sm text-center py-8">{t('picker.noWorkouts')}</p>;
+
+    if (trainingPlan.length === 0) {
+        return (
+            <div className="text-center py-12 space-y-3">
+                <ListChecks className="w-10 h-10 text-dark-400 mx-auto" />
+                <p className="text-dark-300 text-sm">{t('tips.noPlan')}</p>
+                <p className="text-dark-400 text-xs">{t('tips.noPlanHint')}</p>
+            </div>
+        );
     }
 
     return (
         <div className="space-y-3">
             <div>
-                <h3 className="text-lg font-semibold text-cream-50">{t('picker.title')}</h3>
-                <p className="text-xs text-dark-300 mt-0.5">{t('picker.subtitle')}</p>
+                <h3 className="text-lg font-semibold text-cream-50">{t('tips.pickWorkout')}</h3>
+                <p className="text-xs text-dark-300 mt-0.5">{t('tips.pickWorkoutDesc')}</p>
             </div>
             <div className="space-y-2">
-                {workouts.map((w) => (
-                    <button key={w.index} onClick={() => onSelect(w.index)}
-                        className="w-full text-left bg-dark-700/40 hover:bg-dark-700/60 backdrop-blur-sm rounded-xl border border-dark-500/30 hover:border-blue-500/30 p-4 transition-all cursor-pointer group">
-                        <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-sm font-medium text-cream-50 group-hover:text-blue-300 transition-colors">{w.title}</span>
-                            <div className="flex items-center gap-2 text-[11px] text-dark-400">
-                                {w.duration_min && (
-                                    <span className="flex items-center gap-1"><Clock size={10} />{w.duration_min}m</span>
-                                )}
-                                <span>{w.date}</span>
-                            </div>
-                        </div>
-                        <div className="flex flex-wrap gap-1.5">
-                            {w.exercise_names.slice(0, 5).map((name, i) => (
-                                <span key={i} className="text-[10px] text-dark-300 bg-dark-600/50 px-2 py-0.5 rounded-full">
+                {trainingPlan.map((name) => (
+                    <button
+                        key={name}
+                        onClick={() => onSelect(name)}
+                        className="w-full text-left bg-dark-700/40 hover:bg-dark-700/60 backdrop-blur-sm rounded-xl border border-dark-500/30 hover:border-blue-500/30 p-4 transition-all cursor-pointer group"
+                    >
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-blue-500/15 border border-blue-500/30 flex items-center justify-center group-hover:scale-105 transition-transform">
+                                    <Dumbbell size={14} className="text-blue-400" />
+                                </div>
+                                <span className="text-sm font-medium text-cream-50 group-hover:text-blue-300 transition-colors">
                                     {name}
                                 </span>
-                            ))}
-                            {w.exercise_names.length > 5 && (
-                                <span className="text-[10px] text-dark-400 px-2 py-0.5">+{w.exercise_names.length - 5} more</span>
-                            )}
+                            </div>
+                            <ChevronRight size={16} className="text-dark-400 group-hover:text-blue-400 transition-colors" />
                         </div>
                     </button>
                 ))}
@@ -1330,7 +1125,7 @@ function WorkoutPicker({ workouts, onSelect }: {
     );
 }
 
-/* ── Workout Tips Content (AI result) ───────────────── */
+/* ── Workout Tips Content (per-set targets) ─────────── */
 
 function WorkoutTipsContent({ tips, onBack }: {
     tips: WorkoutTips;
@@ -1346,12 +1141,9 @@ function WorkoutTipsContent({ tips, onBack }: {
                     <ArrowLeft size={12} />{t('tips.backToWorkouts')}
                 </button>
                 <h3 className="text-lg font-semibold text-cream-50">{tips.workout_title}</h3>
-                {tips.workout_date && (
-                    <p className="text-xs text-dark-300 mt-0.5">{tips.workout_date}</p>
-                )}
             </div>
 
-            {/* Nutrition Context — redesigned as a card */}
+            {/* Nutrition Context */}
             {tips.nutrition_context && (
                 <div className="bg-gradient-to-br from-amber-500/8 to-orange-500/5 border border-amber-500/20 rounded-xl p-4">
                     <div className="flex items-center gap-2 mb-2">
@@ -1364,44 +1156,56 @@ function WorkoutTipsContent({ tips, onBack }: {
                 </div>
             )}
 
-            {/* Exercise Tips — cleaner card layout */}
-            {tips.exercise_tips.length > 0 && (
+            {/* Exercise Targets — per-set cards */}
+            {tips.exercise_targets && tips.exercise_targets.length > 0 && (
                 <div>
                     <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5 font-semibold">
-                        <Dumbbell size={10} />{t('tips.exerciseBreakdown')}
+                        <Target size={10} />{t('tips.yourTargets')}
                     </p>
                     <div className="space-y-3">
-                        {tips.exercise_tips.map((et, i) => (
-                            <div key={i} className="bg-dark-700/40 rounded-xl border border-dark-500/20 p-4 space-y-2.5">
+                        {tips.exercise_targets.map((et, i) => (
+                            <div key={i} className="bg-dark-700/40 rounded-xl border border-dark-500/20 p-4 space-y-3">
                                 {/* Exercise header */}
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-md bg-purple-500/15 border border-purple-500/30 flex items-center justify-center">
-                                            <Dumbbell size={10} className="text-purple-400" />
-                                        </div>
-                                        <span className="text-sm font-semibold text-cream-50">{et.name}</span>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-md bg-blue-500/15 border border-blue-500/30 flex items-center justify-center">
+                                        <Dumbbell size={10} className="text-blue-400" />
                                     </div>
-                                    <span className="text-[10px] text-dark-300 bg-dark-600/60 px-2.5 py-1 rounded-lg font-mono border border-dark-500/20">
-                                        {et.sets_reps_done}
-                                    </span>
+                                    <span className="text-sm font-semibold text-cream-50">{et.name}</span>
                                 </div>
 
-                                {/* Progression note */}
-                                <div className="flex items-start gap-2 bg-dark-600/30 rounded-lg p-2.5">
-                                    <TrendingUp size={12} className="text-purple-400 shrink-0 mt-0.5" />
-                                    <p className="text-cream-300 text-[11px] leading-relaxed">{et.progression_note}</p>
-                                </div>
-
-                                {/* Recommendation — action card */}
-                                <div className="bg-gradient-to-r from-blue-500/8 to-indigo-500/5 border border-blue-500/20 rounded-lg p-3">
-                                    <div className="flex items-start gap-2">
-                                        <Target size={12} className="text-blue-400 shrink-0 mt-0.5" />
-                                        <div>
-                                            <p className="text-[9px] text-blue-400 font-bold uppercase tracking-wider mb-1">Empfehlung</p>
-                                            <p className="text-blue-200 text-xs font-medium leading-relaxed">{et.recommendation}</p>
-                                        </div>
+                                {/* Set targets table */}
+                                {et.set_targets && et.set_targets.length > 0 && (
+                                    <div className="space-y-1.5">
+                                        {et.set_targets.map((st, j) => (
+                                            <div key={j} className="flex items-center gap-3 bg-dark-600/30 rounded-lg px-3 py-2">
+                                                <span className="text-[10px] text-dark-400 font-mono w-8 shrink-0">
+                                                    Set {st.set_number}
+                                                </span>
+                                                <div className="flex items-center gap-2 flex-1">
+                                                    <span className="text-sm font-bold text-blue-300 font-mono">
+                                                        {st.weight_kg > 0 ? `${st.weight_kg}kg` : 'BW'}
+                                                    </span>
+                                                    <span className="text-dark-400">×</span>
+                                                    <span className="text-sm font-bold text-cream-100 font-mono">
+                                                        {st.reps}
+                                                    </span>
+                                                </div>
+                                                {st.note && (
+                                                    <span className="text-[10px] text-dark-300 italic shrink-0">
+                                                        {st.note}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        ))}
                                     </div>
-                                </div>
+                                )}
+
+                                {/* Reasoning */}
+                                {et.reasoning && (
+                                    <p className="text-[11px] text-dark-300 leading-relaxed pl-1 italic">
+                                        {et.reasoning}
+                                    </p>
+                                )}
                             </div>
                         ))}
                     </div>
@@ -1409,7 +1213,7 @@ function WorkoutTipsContent({ tips, onBack }: {
             )}
 
             {/* New exercises to try */}
-            {tips.new_exercises_to_try.length > 0 && (
+            {tips.new_exercises_to_try && tips.new_exercises_to_try.length > 0 && (
                 <div>
                     <p className="text-[10px] text-dark-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5 font-semibold">
                         <Plus size={10} />{t('tips.tryNextTime')}

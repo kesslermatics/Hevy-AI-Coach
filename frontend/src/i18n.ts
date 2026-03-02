@@ -114,7 +114,7 @@ const translations = {
     'dashboard.lastSession': { de: 'Letzte Session', en: 'Last Session' },
     'dashboard.lastSessionDesc': { de: 'Review, Rankings & Progression', en: 'Review, rankings & progression' },
     'dashboard.workoutTips': { de: 'Workout-Tipps', en: 'Workout Tips' },
-    'dashboard.workoutTipsDesc': { de: 'Wähle eine Session für KI-Coaching', en: 'Pick a session for AI coaching' },
+    'dashboard.workoutTipsDesc': { de: 'KI-Targets für dein nächstes Training', en: 'AI targets for your next session' },
     'dashboard.newReviews': { de: 'Neu', en: 'New' },
     'dashboard.syncReviews': { de: 'Reviews prüfen', en: 'Check for reviews' },
     'dashboard.syncingReviews': { de: 'Wird geprüft…', en: 'Checking…' },
@@ -167,6 +167,11 @@ const translations = {
     'tips.nutritionPhase': { de: 'Ernährungsphase', en: 'Nutrition Phase' },
     'tips.exerciseBreakdown': { de: 'Übungsanalyse', en: 'Exercise Breakdown' },
     'tips.tryNextTime': { de: 'Nächstes Mal ausprobieren', en: 'Try next time' },
+    'tips.yourTargets': { de: 'Deine Targets', en: 'Your Targets' },
+    'tips.noPlan': { de: 'Kein Trainingsplan gesetzt', en: 'No training plan set' },
+    'tips.noPlanHint': { de: 'Wähle unter "Mein Trainingsplan" deine Workouts aus, um hier Targets zu erhalten.', en: 'Select your workouts under "My Training Plan" to get targets here.' },
+    'tips.pickWorkout': { de: 'Wähle ein Workout', en: 'Pick a workout' },
+    'tips.pickWorkoutDesc': { de: 'Der Coach erstellt dir Targets für dein nächstes Training', en: 'Coach will create targets for your next session' },
 
     /* ── Exercise Card ────────────────────────────────── */
     'exercise.breakthrough': { de: 'Durchbruch!', en: 'Breakthrough!' },

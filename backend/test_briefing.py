@@ -166,27 +166,30 @@ async def main():
             print()
             print("🤖 Calling Gemini for Workout Tips (workout #1)...")
             from app.services.ai_service import generate_workout_tips
+            workout_name = hevy[0].get("title", "Workout")
             tips = await generate_workout_tips(
                 yazio_data=yazio,
                 hevy_data=hevy,
-                workout_index=0,
+                workout_name=workout_name,
             )
 
             print()
             print("═" * 55)
             print("  💡  WORKOUT TIPS")
             print("═" * 55)
-            print(f"\n  📋 {tips.get('workout_title', '?')} ({tips.get('workout_date', '?')})")
+            print(f"\n  📋 {tips.get('workout_title', '?')}")
 
             nc = tips.get("nutrition_context", "")
             if nc:
                 print(f"\n  🍽️  Nutrition Context:")
                 print(f"     {nc}")
 
-            for et in tips.get("exercise_tips", []):
-                print(f"\n  🏋️  {et.get('name', '?')} — {et.get('sets_reps_done', '?')}")
-                print(f"     📈 {et.get('progression_note', '')}")
-                print(f"     → {et.get('recommendation', '')}")
+            for et in tips.get("exercise_targets", []):
+                print(f"\n  🏋️  {et.get('name', '?')}")
+                for st in et.get("set_targets", []):
+                    note = f" ({st.get('note')})" if st.get("note") else ""
+                    print(f"     Set {st.get('set_number')}: {st.get('weight_kg')}kg × {st.get('reps')}{note}")
+                print(f"     → {et.get('reasoning', '')}")
 
             for ne in tips.get("new_exercises_to_try", []):
                 print(f"\n  ✨ Try: {ne.get('name', '?')} ({ne.get('suggested_sets_reps', '?')})")

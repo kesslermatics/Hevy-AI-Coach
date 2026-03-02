@@ -384,7 +384,7 @@ async def get_workout_list(
 
 
 class WorkoutTipsRequest(BaseModel):
-    workout_index: int
+    workout_name: str
 
 
 @router.post("/workout-tips")
@@ -394,37 +394,35 @@ async def get_workout_tips(
     db: Session = Depends(get_db),
 ):
     """
-    Workout tips — if a pre-generated review exists for the selected workout,
-    returns its tips_data instantly. Otherwise generates live with coaching memory.
+    Workout tips — generates forward-looking per-set targets for a workout type.
+    Accepts a workout name (from the user's training plan), finds the most recent
+    instance in Hevy history, and generates targets with coaching memory.
     """
     context = await gather_user_context(current_user)
     workouts = context.get("hevy") or []
 
-    if body.workout_index < 0 or body.workout_index >= len(workouts):
-        raise HTTPException(status_code=400, detail="Invalid workout index")
+    workout_name = body.workout_name.strip()
+    if not workout_name:
+        raise HTTPException(status_code=400, detail="Workout name is required")
 
-    selected_workout = workouts[body.workout_index]
-    hevy_id = selected_workout.get("id", "")
-
-    # Check if we already have tips in the DB
-    if hevy_id:
-        existing = (
-            db.query(WorkoutReview)
-            .filter(
-                WorkoutReview.user_id == current_user.id,
-                WorkoutReview.hevy_workout_id == str(hevy_id),
-            )
-            .first()
+    # Check if we already have tips in the DB for the most recent instance
+    existing = (
+        db.query(WorkoutReview)
+        .filter(
+            WorkoutReview.user_id == current_user.id,
+            WorkoutReview.workout_name == workout_name,
         )
-        if existing and existing.tips_data:
-            # Mark as read
-            if not existing.is_read:
-                existing.is_read = True
-                db.commit()
-            return existing.tips_data
+        .order_by(WorkoutReview.workout_date.desc())
+        .first()
+    )
+    if existing and existing.tips_data:
+        # Mark as read
+        if not existing.is_read:
+            existing.is_read = True
+            db.commit()
+        return existing.tips_data
 
     # No pre-generated tips — generate live with coaching memory (last 3)
-    workout_name = selected_workout.get("title", "Workout")
     previous_reviews = (
         db.query(WorkoutReview)
         .filter(
@@ -440,7 +438,7 @@ async def get_workout_tips(
     result = await generate_workout_tips(
         yazio_data=context["yazio"],
         hevy_data=workouts,
-        workout_index=body.workout_index,
+        workout_name=workout_name,
         language=current_user.language or "de",
         previous_tips_list=previous_tips_list,
     )

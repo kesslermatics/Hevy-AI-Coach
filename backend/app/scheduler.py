@@ -166,7 +166,7 @@ async def _generate_workout_review_for_user(user: User, db: Session, max_new_rev
             tips_data = await generate_workout_tips(
                 yazio_data=context["yazio"],
                 hevy_data=workouts,
-                workout_index=i,
+                workout_name=workout_name,
                 language=lang,
                 previous_tips_list=previous_tips_list,
             )

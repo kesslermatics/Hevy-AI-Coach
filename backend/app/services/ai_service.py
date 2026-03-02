@@ -36,9 +36,8 @@ FALLBACK_SESSION_REVIEW = {
 
 FALLBACK_WORKOUT_TIPS = {
     "workout_title": "Unknown",
-    "workout_date": "",
     "nutrition_context": "Unable to load nutrition context.",
-    "exercise_tips": [],
+    "exercise_targets": [],
     "new_exercises_to_try": [],
     "general_advice": "",
 }
@@ -637,7 +636,7 @@ async def generate_session_review(
 
 
 def _build_workout_tips_prompt(profile: Optional[dict], lang: str = "de") -> str:
-    """Build system prompt for workout-specific tips and suggestions."""
+    """Build system prompt for forward-looking per-set workout targets."""
     p = profile or {}
     name = " ".join(filter(None, [p.get("first_name"), p.get("last_name")])) or "Athlete"
     goal = (p.get("goal") or "general fitness").replace("_", " ")
@@ -674,51 +673,57 @@ def _build_workout_tips_prompt(profile: Optional[dict], lang: str = "de") -> str
 {user_context}
 
 You will receive:
-1. A SELECTED workout that the user wants tips for (marked with "=== SELECTED WORKOUT ===").
-2. The user's recent workout history (up to 20 sessions) for progression context.
+1. A WORKOUT NAME that the user plans to do next (marked with "=== PLANNED WORKOUT ===").
+2. The user's recent workout history (up to 20 sessions) — use this ONLY as context to decide smart targets. Do NOT display history in the output.
 3. Yesterday's nutrition data from Yazio (may be missing).
 
-=== COACHING PHILOSOPHY ===
-Your tips must be SPECIFIC and DATA-DRIVEN, not generic. Focus on:
+=== YOUR TASK ===
+Give the user a CONCRETE PLAN for their next session of this workout type.
+For EACH exercise, tell them EXACTLY what to do for EVERY SET: weight and reps.
+This is purely FORWARD-LOOKING — you are telling them what to aim for, not reviewing what they did.
 
-0. **Coaching Memory / Continuity**: If "YOUR PREVIOUS COACHING" data is provided at the end of the message, you MUST actively reference your own past tips:
-   - Did the user follow your recommendation? (e.g. you said "Go to 4×8 @ 65kg" — did they?)
-   - Praise compliance: "Letzte Woche hab ich dir 65kg empfohlen und du hast's gemacht — stark!"
-   - Note non-compliance gently: "Ich hatte dir 4×8 empfohlen, du hast wieder 4×10 gemacht — versuch nächstes Mal wirklich die Reps zu senken und das Gewicht zu erhöhen."
-   - Adjust your NEW recommendation based on whether they followed the old one or not.
-   - This creates a continuous coaching relationship, not one-off tips.
+Use their history to make smart decisions, but the output must only contain TARGETS for the upcoming session.
 
-1. **Rep ranges & set structure**: Analyze what rep ranges the user is currently doing per exercise. 
-   - Are they training in the right rep range for their goal? (Hypertrophy: 8-12, Strength: 3-6, Endurance: 15+)
-   - Should they increase or decrease reps? Add or remove sets?
-   - Be specific: "You did 4×10 at 60kg — try 4×8 at 65kg next time" instead of "increase weight gradually".
+=== COACHING RULES ===
 
-2. **Progression based on history**: Compare the selected workout with previous instances of the same exercises across all workouts.
-   - Has weight/reps increased, stagnated, or dropped?
-   - If stagnated: suggest a concrete deload or rep scheme change.
-   - If progressing: say when they could go up again and by how much (e.g. "+2.5kg next session" or "add 1 rep per set first").
+0. **Coaching Memory / Continuity**: If "YOUR PREVIOUS COACHING" data is provided, reference your past targets:
+   - Did the user follow your target? Praise if yes, gently note if not.
+   - Adjust your NEW targets based on whether they followed the old ones.
+   - This creates a continuous coaching relationship.
 
-3. **Nutrition context**: The user's goal (bulk/cut/maintain) directly affects training advice.
-   - In a caloric deficit (cutting): don't push heavy PR attempts, focus on maintaining strength, moderate volume.
-   - In a surplus (bulking): push progressive overload harder, more volume is sustainable.
-   - At maintenance: balanced approach.
-   - Reference their actual calorie/protein numbers if available.
+1. **Per-set targets**: For each exercise, give a target for EVERY set.
+   - Each set has: weight (kg), reps, and an optional short note (e.g. "Aufwärmsatz", "Arbeitssatz", "Letzter Satz — Vollgas!").
+   - Base these on their recent performance + goal-appropriate progression.
+   - For Hypertrophy goals: 8-12 reps. Strength: 3-6 reps. Endurance: 15+.
 
-4. **Recovery & volume**: Based on how often they train similar muscle groups (visible in history), advise on volume.
+2. **Smart progression**: Look at their last sessions of this workout type.
+   - If they completed all sets cleanly last time: increase weight by 2.5kg or add 1-2 reps per set.
+   - If they struggled: keep same weight, maybe reduce reps slightly.
+   - If stagnated for 3+ sessions: suggest a deload or rep scheme change.
 
-IMPORTANT: Do NOT give generic exercise form tips. The user knows how to perform the exercises. Focus ONLY on programming: rep ranges, weight progression, volume, and how it ties to their nutrition phase.
+3. **Nutrition awareness**: The user's nutrition phase affects targets.
+   - Deficit (cutting): conservative targets, maintain strength, don't push PRs.
+   - Surplus (bulking): push progressive overload harder.
+   - Maintenance: balanced approach.
+
+4. **No form tips, no exercise descriptions**. The user knows how to perform exercises. Only give programming targets.
 
 You MUST respond with valid JSON matching this exact schema:
 {{
-  "workout_title": "<string, name of the selected workout>",
-  "workout_date": "<string, date>",
-  "nutrition_context": "<string, 2-3 sentences: how the user's current nutrition phase (surplus/deficit/maintenance) affects this workout's training recommendations. Reference actual numbers if available.>",
-  "exercise_tips": [
+  "workout_title": "<string, name of the workout>",
+  "nutrition_context": "<string, 2-3 sentences: how their current nutrition phase affects these targets. Reference actual numbers if available.>",
+  "exercise_targets": [
     {{
       "name": "<string, exercise name>",
-      "sets_reps_done": "<string, what they actually did, e.g. '4×10 @ 60kg'>",
-      "progression_note": "<string, comparison to previous sessions: improved / stagnated / first time / declined. Include specific numbers.>",
-      "recommendation": "<string, concrete next-session target. E.g. 'Go to 4×8 @ 65kg' or 'Stay at this weight, aim for 4×12 before increasing' or 'Deload to 50kg × 10 for two weeks, you've been stuck for 3 sessions'>"
+      "set_targets": [
+        {{
+          "set_number": <int, 1-based>,
+          "weight_kg": <number, target weight in kg — use 0 for bodyweight exercises>,
+          "reps": <int, target reps>,
+          "note": "<string, optional short note like 'Aufwärmsatz' or 'Topset' or '' if none>"
+        }}
+      ],
+      "reasoning": "<string, ONE sentence explaining why these targets (e.g. 'Last time you did 4×10@60kg cleanly, stepping up 2.5kg')>"
     }}
   ],
   "new_exercises_to_try": [
@@ -728,7 +733,7 @@ You MUST respond with valid JSON matching this exact schema:
       "suggested_sets_reps": "<string, e.g. '3×10-12 @ moderate weight'>"
     }}
   ],
-  "general_advice": "<string, one actionable sentence tying nutrition + training together for their next session>"
+  "general_advice": "<string, one actionable sentence tying nutrition + training together for the upcoming session>"
 }}
 
 Respond ONLY with the JSON object. No markdown, no explanation."""
@@ -738,28 +743,43 @@ Respond ONLY with the JSON object. No markdown, no explanation."""
 async def generate_workout_tips(
     yazio_data: Optional[dict],
     hevy_data: Optional[list],
-    workout_index: int,
+    workout_name: str,
     language: str = "de",
     previous_tips_list: Optional[list[dict]] = None,
 ) -> dict:
     """
-    Call Gemini to generate tips for a specific selected workout.
+    Call Gemini to generate forward-looking per-set targets for a workout type.
+    Finds the most recent instance of `workout_name` in hevy_data and uses all
+    history as context to produce smart targets for the next session.
     When previous_tips_list is provided (up to 3), Gemini receives its own past coaching
     outputs for the same workout name, enabling deep continuity ("Coach Memory").
     """
-    if not hevy_data or workout_index >= len(hevy_data):
+    if not hevy_data:
         return FALLBACK_WORKOUT_TIPS
+
+    # Find the most recent workout matching this name
+    selected = None
+    for w in hevy_data:
+        if w.get("title", "").strip().lower() == workout_name.strip().lower():
+            selected = w
+            break
+
+    if not selected:
+        # No matching workout found — still generate tips based on the workout name alone
+        selected = {"title": workout_name, "exercises": [], "start_time": ""}
 
     client = genai.Client(api_key=settings.gemini_api_key)
 
     profile = yazio_data.get("profile") if yazio_data else None
     system_prompt = _build_workout_tips_prompt(profile, lang=language)
 
-    # Build user message: selected workout highlighted + context + nutrition
-    selected = hevy_data[workout_index]
+    # Build user message: planned workout + history context + nutrition
     parts: list[str] = []
-    parts.append("=== SELECTED WORKOUT (analyze this one) ===")
-    parts.append(_format_workout(selected))
+    parts.append(f"=== PLANNED WORKOUT (generate targets for this) ===")
+    parts.append(f"Workout name: {workout_name}")
+    if selected.get("exercises"):
+        parts.append("Exercises in this workout (from most recent session):")
+        parts.append(_format_workout(selected))
     parts.append("")
 
     # Add nutrition context if available
@@ -784,10 +804,8 @@ async def generate_workout_tips(
             parts.append("→ Roughly at calorie goal (maintenance).")
         parts.append("")
 
-    parts.append(f"=== RECENT WORKOUT HISTORY ({len(hevy_data)} total, for progression context) ===")
+    parts.append(f"=== RECENT WORKOUT HISTORY ({len(hevy_data)} total, for context only — do NOT show in output) ===")
     for i, w in enumerate(hevy_data):
-        if i == workout_index:
-            continue
         parts.append(f"\nWorkout {i + 1}:")
         parts.append(_format_workout(w))
 
@@ -820,8 +838,8 @@ async def generate_workout_tips(
         parsed = json.loads(cleaned)
 
         # Ensure arrays exist
-        if "exercise_tips" not in parsed:
-            parsed["exercise_tips"] = []
+        if "exercise_targets" not in parsed:
+            parsed["exercise_targets"] = []
         if "new_exercises_to_try" not in parsed:
             parsed["new_exercises_to_try"] = []
 
@@ -862,11 +880,15 @@ def _format_coaching_memory(previous_data_list: list[dict], memory_type: str = "
                                  f"you said: \"{ex.get('feedback', '')}\" "
                                  f"target you set: \"{ex.get('next_target', '')}\"")
         elif memory_type == "workout_tips":
-            parts.append(f"Tips for: {previous_data.get('workout_title', '?')} "
-                         f"on {previous_data.get('workout_date', '?')}")
-            for et in previous_data.get("exercise_tips", []):
-                parts.append(f"  • {et.get('name', '?')}: did {et.get('sets_reps_done', '?')}, "
-                             f"your recommendation was: \"{et.get('recommendation', '')}\"")
+            parts.append(f"Tips for: {previous_data.get('workout_title', '?')}")
+            for et in previous_data.get("exercise_targets", []):
+                set_targets = et.get("set_targets", [])
+                sets_str = ", ".join(
+                    f"Set {s.get('set_number', '?')}: {s.get('weight_kg', '?')}kg×{s.get('reps', '?')}"
+                    for s in set_targets
+                )
+                parts.append(f"  • {et.get('name', '?')}: your targets were [{sets_str}], "
+                             f"reasoning: \"{et.get('reasoning', '')}\"")
             if previous_data.get("general_advice"):
                 parts.append(f"  General advice you gave: \"{previous_data['general_advice']}\"")
         parts.append("")
