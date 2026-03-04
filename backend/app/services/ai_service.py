@@ -757,16 +757,21 @@ async def generate_workout_tips(
     if not hevy_data:
         return FALLBACK_WORKOUT_TIPS
 
-    # Find the most recent workout matching this name
-    selected = None
-    for w in hevy_data:
-        if w.get("title", "").strip().lower() == workout_name.strip().lower():
-            selected = w
-            break
+    # Find ALL sessions matching this workout name to build the full exercise template
+    matching_sessions = [w for w in hevy_data if w.get("title", "").strip().lower() == workout_name.strip().lower()]
 
-    if not selected:
-        # No matching workout found — still generate tips based on the workout name alone
-        selected = {"title": workout_name, "exercises": [], "start_time": ""}
+    # Build a merged exercise list: all unique exercises across all sessions of this workout
+    # This ensures we cover the full template, not just the most recent session
+    seen_exercises: dict[str, dict] = {}  # exercise title -> most recent exercise data
+    for session in matching_sessions:
+        for ex in session.get("exercises", []):
+            ex_title = ex.get("title", "?")
+            if ex_title not in seen_exercises:
+                seen_exercises[ex_title] = ex
+
+    selected = matching_sessions[0] if matching_sessions else {"title": workout_name, "exercises": [], "start_time": ""}
+    # Build a synthetic "full template" workout with all exercises ever done in this workout type
+    full_template_exercises = list(seen_exercises.values())
 
     client = genai.Client(api_key=settings.gemini_api_key)
 
@@ -775,11 +780,27 @@ async def generate_workout_tips(
 
     # Build user message: planned workout + history context + nutrition
     parts: list[str] = []
-    parts.append(f"=== PLANNED WORKOUT (generate targets for this) ===")
+    parts.append(f"=== PLANNED WORKOUT (generate targets for ALL exercises listed below) ===")
     parts.append(f"Workout name: {workout_name}")
-    if selected.get("exercises"):
-        parts.append("Exercises in this workout (from most recent session):")
-        parts.append(_format_workout(selected))
+    if full_template_exercises:
+        parts.append(f"Full exercise list for this workout template ({len(full_template_exercises)} exercises, collected from {len(matching_sessions)} past session(s)):")
+        # Format each exercise with its most recent set data
+        for ex in full_template_exercises:
+            sets_summary = []
+            for s in ex.get("sets", []):
+                weight = s.get("weight_kg")
+                reps = s.get("reps")
+                if weight is not None and reps is not None:
+                    sets_summary.append(f"{weight}kg×{reps}")
+                elif reps is not None:
+                    sets_summary.append(f"{reps} reps")
+                elif s.get("duration_seconds"):
+                    sets_summary.append(f"{s['duration_seconds']}s")
+            sets_str = ", ".join(sets_summary) if sets_summary else "no set data"
+            muscle = f" [{ex.get('muscle_group')}]" if ex.get("muscle_group") else ""
+            parts.append(f"  • {ex.get('title', '?')}{muscle}: {sets_str}")
+    parts.append("")
+    parts.append("IMPORTANT: You MUST generate targets for EVERY exercise listed above. Do not skip any.")
     parts.append("")
 
     # Add nutrition context if available
