@@ -1051,6 +1051,19 @@ async def generate_chat_response(
                              f"P: {goals.get('protein', 0)}g | "
                              f"C: {goals.get('carbs', 0)}g | "
                              f"F: {goals.get('fat', 0)}g")
+        # Include individual food items from yesterday
+        y_food = yazio_data.get("food_items", {})
+        if y_food:
+            context_parts.append("Yesterday's meals (individual items):")
+            for meal_key in ["breakfast", "lunch", "dinner", "snack"]:
+                items = y_food.get(meal_key, [])
+                if items:
+                    meal_label = meal_key.capitalize()
+                    item_strs = [f"  - {fi['name']}" + (f" ({fi['brand']})" if fi.get('brand') else "") +
+                                 f" {fi['amount']}g: {fi['calories']} kcal, P:{fi['protein']}g, C:{fi['carbs']}g, F:{fi['fat']}g"
+                                 for fi in items]
+                    context_parts.append(f"  {meal_label}:")
+                    context_parts.extend(item_strs)
 
     if today_nutrition:
         t_totals = today_nutrition.get("totals", {})
@@ -1231,15 +1244,36 @@ Respond ONLY with valid JSON in this exact format:
                 "overall_patterns": "Keine Muster erkannt.",
             }
 
-        # Parse JSON
-        import json
-        import re
-        # Extract JSON from response (might have markdown code blocks)
-        json_match = re.search(r'\{[^{}]*"yesterday_analysis"[^{}]*\}', text, re.DOTALL)
-        if json_match:
-            return json.loads(json_match.group())
+        # Parse JSON - handle markdown code blocks and multiline strings
+        # Remove markdown code blocks if present
+        text = text.strip()
+        if text.startswith("```"):
+            # Remove opening code block (```json or ```)
+            text = re.sub(r'^```(?:json)?\s*\n?', '', text)
+            # Remove closing code block
+            text = re.sub(r'\n?```\s*$', '', text)
+        
+        # Find JSON object by matching braces
+        start_idx = text.find('{')
+        if start_idx != -1:
+            brace_count = 0
+            end_idx = start_idx
+            for i, char in enumerate(text[start_idx:], start_idx):
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_idx = i + 1
+                        break
+            
+            json_str = text[start_idx:end_idx]
+            try:
+                return json.loads(json_str)
+            except json.JSONDecodeError:
+                pass
 
-        # Try direct parse
+        # Try direct parse as fallback
         return json.loads(text.strip())
 
     except Exception as exc:

@@ -8,7 +8,7 @@ import type {
 } from '../api/api';
 import {
     UtensilsCrossed, Loader2, Sparkles, ChevronDown, ChevronUp,
-    Flame, Beef, Wheat, Droplets, TrendingUp, Calendar, Award, Package
+    Flame, Beef, TrendingUp, Award
 } from 'lucide-react';
 import { useLanguage } from '../i18n';
 import {
@@ -38,12 +38,11 @@ const MEAL_COLORS: Record<string, string> = {
 };
 
 export default function NutritionPage() {
-    const { user } = useOutletContext<LayoutContext>();
+    useOutletContext<LayoutContext>();
     const { t, lang } = useLanguage();
 
     // Data states
     const [todayNutrition, setTodayNutrition] = useState<TodayNutrition | null>(null);
-    const [yesterdayNutrition, setYesterdayNutrition] = useState<TodayNutrition | null>(null);
     const [history, setHistory] = useState<NutritionHistoryData | null>(null);
     const [stats, setStats] = useState<FoodStatisticsData | null>(null);
     const [analysis, setAnalysis] = useState<NutritionAnalysis | null>(null);
@@ -81,19 +80,6 @@ export default function NutritionPage() {
             try {
                 const data = await getNutritionHistory(historyDays);
                 setHistory(data);
-                // Extract yesterday from history
-                if (data.days && data.days.length > 1) {
-                    const yesterday = data.days[data.days.length - 2];
-                    if (yesterday) {
-                        // Build a pseudo today nutrition from yesterday's data
-                        setYesterdayNutrition({
-                            totals: yesterday.totals,
-                            goals: yesterday.goals,
-                            meals: {},
-                            water_ml: 0,
-                        });
-                    }
-                }
             } catch (e) {
                 console.error('Failed to fetch nutrition history:', e);
             }
@@ -174,14 +160,14 @@ export default function NutritionPage() {
                 </div>
             </div>
 
-            {/* ═══ Macro Trend Chart ════════════════════════════════ */}
+            {/* ═══ Calorie Trend Chart ════════════════════════════════ */}
             <div className="card-glass p-6">
                 <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-orange-500/10 border-orange-500/30 text-orange-400">
-                            <TrendingUp className="w-5 h-5" />
+                            <Flame className="w-5 h-5" />
                         </div>
-                        <h2 className="text-lg font-semibold text-cream-50">{t('nutrition.macroTrend')}</h2>
+                        <h2 className="text-lg font-semibold text-cream-50">{lang === 'de' ? 'Kalorien Trend' : 'Calorie Trend'}</h2>
                     </div>
                     <div className="flex gap-2">
                         {[7, 14, 30].map(d => (
@@ -204,17 +190,51 @@ export default function NutritionPage() {
                         <Loader2 className="w-8 h-8 text-gold-400 animate-spin" />
                     </div>
                 ) : chartData.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={280}>
+                    <ResponsiveContainer width="100%" height={220}>
                         <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#333" />
                             <XAxis dataKey="date" stroke="#666" fontSize={11} />
-                            <YAxis stroke="#666" fontSize={11} />
+                            <YAxis stroke="#666" fontSize={11} unit=" kcal" />
                             <Tooltip
                                 contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px' }}
                                 labelStyle={{ color: '#fafaf5' }}
+                                formatter={(value: number) => [`${Math.round(value)} kcal`, '']}
                             />
                             <Legend />
                             <Line type="monotone" dataKey="calories" name={t('dashboard.calories')} stroke={COLORS.calories} strokeWidth={2} dot={{ r: 3 }} />
+                            <Line type="monotone" dataKey="calorieGoal" name={lang === 'de' ? 'Ziel' : 'Goal'} stroke="#666" strokeWidth={1} strokeDasharray="5 5" dot={false} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                ) : (
+                    <p className="text-dark-400 text-center py-12">{t('nutrition.noData')}</p>
+                )}
+            </div>
+
+            {/* ═══ Macro Trend Chart (Protein/Carbs/Fat) ═══════════════════ */}
+            <div className="card-glass p-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-red-500/10 border-red-500/30 text-red-400">
+                        <TrendingUp className="w-5 h-5" />
+                    </div>
+                    <h2 className="text-lg font-semibold text-cream-50">{t('nutrition.macroTrend')}</h2>
+                </div>
+
+                {loadingHistory ? (
+                    <div className="h-48 flex items-center justify-center">
+                        <Loader2 className="w-8 h-8 text-gold-400 animate-spin" />
+                    </div>
+                ) : chartData.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={200}>
+                        <LineChart data={chartData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                            <XAxis dataKey="date" stroke="#666" fontSize={11} />
+                            <YAxis stroke="#666" fontSize={11} unit="g" />
+                            <Tooltip
+                                contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px' }}
+                                labelStyle={{ color: '#fafaf5' }}
+                                formatter={(value: number) => [`${Math.round(value)}g`, '']}
+                            />
+                            <Legend />
                             <Line type="monotone" dataKey="protein" name={t('dashboard.protein')} stroke={COLORS.protein} strokeWidth={2} dot={{ r: 3 }} />
                             <Line type="monotone" dataKey="carbs" name={t('dashboard.carbs')} stroke={COLORS.carbs} strokeWidth={2} dot={{ r: 3 }} />
                             <Line type="monotone" dataKey="fat" name={t('dashboard.fat')} stroke={COLORS.fat} strokeWidth={2} dot={{ r: 3 }} />
@@ -237,22 +257,20 @@ export default function NutritionPage() {
                     </div>
 
                     {loadingToday ? (
-                        <div className="h-48 flex items-center justify-center">
+                        <div className="h-64 flex items-center justify-center">
                             <Loader2 className="w-6 h-6 text-gold-400 animate-spin" />
                         </div>
                     ) : mealPieData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={200}>
+                        <ResponsiveContainer width="100%" height={280}>
                             <PieChart>
                                 <Pie
                                     data={mealPieData}
                                     cx="50%"
-                                    cy="50%"
-                                    innerRadius={50}
-                                    outerRadius={80}
+                                    cy="45%"
+                                    innerRadius={45}
+                                    outerRadius={75}
                                     paddingAngle={2}
                                     dataKey="value"
-                                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                    labelLine={{ stroke: '#666' }}
                                 >
                                     {mealPieData.map((entry) => (
                                         <Cell key={entry.key} fill={MEAL_COLORS[entry.key] || '#666'} />
@@ -260,7 +278,15 @@ export default function NutritionPage() {
                                 </Pie>
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px' }}
-                                    formatter={(value: number) => [`${Math.round(value)} kcal`, '']}
+                                    formatter={(value) => [`${Math.round(Number(value ?? 0))} kcal`, '']}
+                                />
+                                <Legend
+                                    verticalAlign="bottom"
+                                    height={50}
+                                    formatter={(value) => {
+                                        const item = mealPieData.find(d => d.name === value);
+                                        return `${value}: ${item ? Math.round(item.value) : 0} kcal`;
+                                    }}
                                 />
                             </PieChart>
                         </ResponsiveContainer>
@@ -467,7 +493,7 @@ export default function NutritionPage() {
                                         <YAxis type="category" dataKey="name" stroke="#666" fontSize={10} width={80} tick={{ fontSize: 9 }} />
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', fontSize: 12 }}
-                                            formatter={(value: number) => [`${value}x`, t('nutrition.times')]}
+                                            formatter={(value) => [`${Number(value ?? 0)}x`, t('nutrition.times')]}
                                         />
                                         <Bar dataKey="count" fill="#3b82f6" radius={[0, 4, 4, 0]} />
                                     </BarChart>
@@ -520,62 +546,6 @@ export default function NutritionPage() {
                 )}
             </div>
 
-            {/* ═══ Brands & New Items ═══════════════════════════════ */}
-            {stats && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {/* Top Brands */}
-                    <div className="card-glass p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-cyan-500/10 border-cyan-500/30 text-cyan-400">
-                                <Package className="w-5 h-5" />
-                            </div>
-                            <h2 className="text-lg font-semibold text-cream-50">{t('nutrition.topBrands')}</h2>
-                        </div>
-                        {stats.top_brands.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                                {stats.top_brands.map((b, i) => (
-                                    <span
-                                        key={i}
-                                        className="px-3 py-1.5 bg-dark-700 rounded-full text-sm text-cream-100"
-                                        style={{ fontSize: `${Math.min(14, 10 + b.count * 0.5)}px` }}
-                                    >
-                                        {b.brand} <span className="text-dark-400">({b.count}x)</span>
-                                    </span>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-dark-400 text-sm">{t('nutrition.noData')}</p>
-                        )}
-                    </div>
-
-                    {/* New This Week */}
-                    <div className="card-glass p-6">
-                        <div className="flex items-center gap-3 mb-4">
-                            <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-lime-500/10 border-lime-500/30 text-lime-400">
-                                <Calendar className="w-5 h-5" />
-                            </div>
-                            <h2 className="text-lg font-semibold text-cream-50">{t('nutrition.newThisWeek')}</h2>
-                        </div>
-                        {stats.new_this_week.length > 0 ? (
-                            <div className="space-y-2">
-                                {stats.new_this_week.slice(0, 10).map((item, i) => (
-                                    <div key={i} className="flex items-center justify-between py-2 px-3 bg-dark-700/50 rounded-lg text-sm">
-                                        <span className="text-cream-100">
-                                            {item.name}
-                                            {item.brand && <span className="text-dark-400 ml-2">({item.brand})</span>}
-                                        </span>
-                                        <span className="text-dark-400 text-xs">
-                                            {new Date(item.first_seen).toLocaleDateString(lang === 'de' ? 'de-DE' : 'en-US')}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <p className="text-dark-400 text-sm">{t('nutrition.noData')}</p>
-                        )}
-                    </div>
-                </div>
-            )}
         </div>
     );
 }
