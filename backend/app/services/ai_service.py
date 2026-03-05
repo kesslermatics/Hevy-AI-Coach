@@ -1244,8 +1244,10 @@ Respond ONLY with valid JSON in this exact format:
                 "overall_patterns": "Keine Muster erkannt.",
             }
 
-        # Parse JSON - handle markdown code blocks and multiline strings
-        # Remove markdown code blocks if present
+        # Log raw response for debugging
+        logger.debug("Gemini nutrition raw response: %s", text[:500])
+
+        # Parse JSON - handle markdown code blocks
         text = text.strip()
         if text.startswith("```"):
             # Remove opening code block (```json or ```)
@@ -1253,27 +1255,59 @@ Respond ONLY with valid JSON in this exact format:
             # Remove closing code block
             text = re.sub(r'\n?```\s*$', '', text)
         
-        # Find JSON object by matching braces
+        # Find JSON object bounds
         start_idx = text.find('{')
-        if start_idx != -1:
-            brace_count = 0
-            end_idx = start_idx
-            for i, char in enumerate(text[start_idx:], start_idx):
-                if char == '{':
-                    brace_count += 1
-                elif char == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        end_idx = i + 1
-                        break
+        end_idx = text.rfind('}')
+        
+        if start_idx != -1 and end_idx > start_idx:
+            json_str = text[start_idx:end_idx + 1]
             
-            json_str = text[start_idx:end_idx]
+            # Fix unescaped newlines inside JSON strings
+            # Replace actual newlines with escaped \n (but not after a backslash)
+            # This is a common issue with LLM JSON output
+            def fix_json_strings(s: str) -> str:
+                result = []
+                in_string = False
+                i = 0
+                while i < len(s):
+                    char = s[i]
+                    if char == '"' and (i == 0 or s[i-1] != '\\'):
+                        in_string = not in_string
+                        result.append(char)
+                    elif char == '\n' and in_string:
+                        result.append('\\n')
+                    elif char == '\r' and in_string:
+                        result.append('')  # Skip carriage returns
+                    else:
+                        result.append(char)
+                    i += 1
+                return ''.join(result)
+            
+            fixed_json = fix_json_strings(json_str)
+            
             try:
-                return json.loads(json_str)
-            except json.JSONDecodeError:
-                pass
+                return json.loads(fixed_json)
+            except json.JSONDecodeError as e:
+                logger.warning("JSON decode failed after fix: %s. Trying regex extraction.", e)
+        
+        # Fallback: Extract values with regex
+        result = {}
+        for key in ["yesterday_analysis", "today_tips", "overall_patterns"]:
+            match = re.search(rf'"{key}"\s*:\s*"((?:[^"\\]|\\.)*)?"', text, re.DOTALL)
+            if match:
+                # Unescape the value
+                value = match.group(1) if match.group(1) else ""
+                value = value.replace('\\n', ' ').replace('\\r', '').replace('\\"', '"')
+                result[key] = value.strip()
+        
+        if result:
+            return {
+                "yesterday_analysis": result.get("yesterday_analysis", "Keine Analyse."),
+                "today_tips": result.get("today_tips", "Keine Tipps."),
+                "overall_patterns": result.get("overall_patterns", "Keine Muster."),
+            }
 
-        # Try direct parse as fallback
+        # Last resort: direct parse
         return json.loads(text.strip())
 
     except Exception as exc:
