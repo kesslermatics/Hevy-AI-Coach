@@ -101,6 +101,10 @@ const translations = {
     'dashboard.protein': { de: 'Protein', en: 'Protein' },
     'dashboard.carbs': { de: 'Kohlenhydrate', en: 'Carbs' },
     'dashboard.fat': { de: 'Fett', en: 'Fat' },
+    'dashboard.sugar': { de: 'Zucker', en: 'Sugar' },
+    'dashboard.fiber': { de: 'Ballaststoffe', en: 'Fiber' },
+    'dashboard.saturated': { de: 'Ges. Fette', en: 'Sat. Fat' },
+    'dashboard.salt': { de: 'Salz', en: 'Salt' },
 
     'dashboard.workoutTitle': { de: 'Trainingsvorschlag', en: 'Workout Suggestion' },
     'dashboard.workoutSubtitle': { de: 'Heutiger Trainingsfokus', en: "Today's training focus" },

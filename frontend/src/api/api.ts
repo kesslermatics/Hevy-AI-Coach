@@ -483,10 +483,15 @@ export const getAchievements = () =>
 
 /* ── Today's Nutrition ──────────────────────────────── */
 
+export interface NutritionMacros {
+  calories: number; protein: number; carbs: number; fat: number;
+  sugar: number; fiber: number; saturated: number; salt: number;
+}
+
 export interface TodayNutrition {
-  totals: { calories: number; protein: number; carbs: number; fat: number };
-  goals: { calories: number; protein: number; carbs: number; fat: number };
-  meals: Record<string, { calories: number; protein: number; carbs: number; fat: number }>;
+  totals: NutritionMacros;
+  goals: NutritionMacros;
+  meals: Record<string, NutritionMacros>;
   water_ml: number;
   error?: string;
 }

@@ -112,6 +112,7 @@ def _parse_summary(raw: dict) -> dict:
     parsed_meals: dict[str, dict] = {}
     totals = {
         "calories": 0.0, "protein": 0.0, "carbs": 0.0, "fat": 0.0,
+        "sugar": 0.0, "fiber": 0.0, "saturated": 0.0, "salt": 0.0,
     }
 
     for key in MEAL_KEYS:
@@ -122,26 +123,42 @@ def _parse_summary(raw: dict) -> dict:
         prot = nutrients.get("nutrient.protein", 0)
         carb = nutrients.get("nutrient.carb", 0)
         fat  = nutrients.get("nutrient.fat", 0)
+        sugar = nutrients.get("nutrient.sugar", 0)
+        fiber = nutrients.get("nutrient.dietaryfiber", 0)
+        saturated = nutrients.get("nutrient.saturated", 0)
+        salt = nutrients.get("nutrient.salt", 0)
 
         parsed_meals[key] = {
             "calories": round(cal, 1),
             "protein":  round(prot, 1),
             "carbs":    round(carb, 1),
             "fat":      round(fat, 1),
+            "sugar":    round(sugar, 1),
+            "fiber":    round(fiber, 1),
+            "saturated": round(saturated, 1),
+            "salt":     round(salt, 2),
         }
         totals["calories"] += cal
         totals["protein"]  += prot
         totals["carbs"]    += carb
         totals["fat"]      += fat
+        totals["sugar"]    += sugar
+        totals["fiber"]    += fiber
+        totals["saturated"] += saturated
+        totals["salt"]     += salt
 
     # Round totals
-    totals = {k: round(v, 1) for k, v in totals.items()}
+    totals = {k: round(v, 1) if k != "salt" else round(v, 2) for k, v in totals.items()}
 
     goal_data = {
         "calories": round(goals.get("energy.energy", 0), 1),
         "protein":  round(goals.get("nutrient.protein", 0), 1),
         "carbs":    round(goals.get("nutrient.carb", 0), 1),
         "fat":      round(goals.get("nutrient.fat", 0), 1),
+        "sugar":    round(goals.get("nutrient.sugar", 0), 1),
+        "fiber":    round(goals.get("nutrient.dietaryfiber", 0), 1),
+        "saturated": round(goals.get("nutrient.saturated", 0), 1),
+        "salt":     round(goals.get("nutrient.salt", 0), 2),
     }
 
     # Water – might simply be missing
