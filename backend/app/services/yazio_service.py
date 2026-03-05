@@ -19,14 +19,6 @@ YAZIO_CLIENT_SECRET = "6rok2m65xuskgkgogw40wkkk8sw0osg84s8cggsc4woos4s8o"
 
 MEAL_KEYS = ["breakfast", "lunch", "dinner", "snack"]
 
-# Mapping from Yazio daytime values to our meal keys
-_DAYTIME_TO_MEAL = {
-    1: "breakfast",
-    2: "lunch",
-    3: "dinner",
-    4: "snack",
-}
-
 # Secondary nutrient keys we need from products (per 1 gram)
 _SECONDARY_NUTRIENT_KEYS = {
     "nutrient.sugar": "sugar",
@@ -92,7 +84,11 @@ async def _fetch_user_profile(client: httpx.AsyncClient, token: str) -> Optional
 
 
 async def _fetch_consumed_items(client: httpx.AsyncClient, token: str, target_date: str) -> list[dict]:
-    """Fetch all consumed items for a date. Each item has product_id, amount, daytime."""
+    """Fetch all consumed items for a date. Each item has product_id, amount, daytime.
+    
+    The API returns {"products": [...], "recipe_portions": [...], "simple_products": [...]}.
+    We extract the 'products' list.
+    """
     try:
         resp = await client.get(
             f"{YAZIO_BASE_URL}/user/consumed-items",
@@ -102,7 +98,10 @@ async def _fetch_consumed_items(client: httpx.AsyncClient, token: str, target_da
         if resp.status_code != 200:
             logger.warning("Yazio consumed-items failed (HTTP %s)", resp.status_code)
             return []
-        return resp.json() if isinstance(resp.json(), list) else []
+        data = resp.json()
+        if isinstance(data, dict):
+            return data.get("products", [])
+        return []
     except Exception as exc:
         logger.error("Yazio consumed-items error: %s", exc)
         return []
@@ -167,8 +166,8 @@ async def _compute_secondary_macros(
     for item in items:
         product_id = item.get("product_id")
         amount = item.get("amount", 0)  # in grams
-        daytime = item.get("daytime", 4)  # default to snack
-        meal_key = _DAYTIME_TO_MEAL.get(daytime, "snack")
+        daytime = item.get("daytime", "snack")  # string: breakfast/lunch/dinner/snack
+        meal_key = daytime if daytime in MEAL_KEYS else "snack"
 
         product = product_cache.get(product_id)
         if not product:
