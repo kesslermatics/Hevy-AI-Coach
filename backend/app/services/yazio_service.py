@@ -4,6 +4,7 @@ Yazio API service – fetches daily nutrition summaries.
 Uses the undocumented Yazio v15 REST API.
 Handles missing data gracefully (water, incomplete meals, etc.).
 """
+import asyncio
 import logging
 from datetime import date, timedelta
 from typing import Optional
@@ -17,6 +18,22 @@ YAZIO_CLIENT_ID = "1_4hiybetvfksgw40o0sog4s884kwc840wwso8go4k8c04goo4c"
 YAZIO_CLIENT_SECRET = "6rok2m65xuskgkgogw40wkkk8sw0osg84s8cggsc4woos4s8o"
 
 MEAL_KEYS = ["breakfast", "lunch", "dinner", "snack"]
+
+# Mapping from Yazio daytime values to our meal keys
+_DAYTIME_TO_MEAL = {
+    1: "breakfast",
+    2: "lunch",
+    3: "dinner",
+    4: "snack",
+}
+
+# Secondary nutrient keys we need from products (per 1 gram)
+_SECONDARY_NUTRIENT_KEYS = {
+    "nutrient.sugar": "sugar",
+    "nutrient.dietaryfiber": "fiber",
+    "nutrient.saturated": "saturated",
+    "nutrient.salt": "salt",
+}
 
 
 async def _yazio_login(client: httpx.AsyncClient, email: str, password: str) -> Optional[str]:
@@ -72,6 +89,102 @@ async def _fetch_user_profile(client: httpx.AsyncClient, token: str) -> Optional
     except Exception as exc:
         logger.error("Yazio user profile error: %s", exc)
         return None
+
+
+async def _fetch_consumed_items(client: httpx.AsyncClient, token: str, target_date: str) -> list[dict]:
+    """Fetch all consumed items for a date. Each item has product_id, amount, daytime."""
+    try:
+        resp = await client.get(
+            f"{YAZIO_BASE_URL}/user/consumed-items",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            params={"date": target_date},
+        )
+        if resp.status_code != 200:
+            logger.warning("Yazio consumed-items failed (HTTP %s)", resp.status_code)
+            return []
+        return resp.json() if isinstance(resp.json(), list) else []
+    except Exception as exc:
+        logger.error("Yazio consumed-items error: %s", exc)
+        return []
+
+
+async def _fetch_product(
+    client: httpx.AsyncClient, token: str, product_id: str, cache: dict
+) -> Optional[dict]:
+    """Fetch a product's nutrient data. Uses a cache dict to avoid duplicate requests."""
+    if product_id in cache:
+        return cache[product_id]
+    try:
+        resp = await client.get(
+            f"{YAZIO_BASE_URL}/products/{product_id}",
+            headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+        )
+        if resp.status_code != 200:
+            cache[product_id] = None
+            return None
+        data = resp.json()
+        cache[product_id] = data
+        return data
+    except Exception as exc:
+        logger.error("Yazio product fetch error for %s: %s", product_id, exc)
+        cache[product_id] = None
+        return None
+
+
+async def _compute_secondary_macros(
+    client: httpx.AsyncClient, token: str, target_date: str
+) -> dict[str, dict[str, float]]:
+    """
+    Fetch consumed-items for a date, resolve each product, and compute
+    secondary macros (sugar, fiber, saturated fat, salt) per meal.
+
+    Returns a dict keyed by meal name (breakfast/lunch/dinner/snack)
+    with values like {"sugar": 12.3, "fiber": 5.1, "saturated": 3.2, "salt": 1.8}.
+    """
+    items = await _fetch_consumed_items(client, token, target_date)
+    if not items:
+        return {}
+
+    product_cache: dict[str, Optional[dict]] = {}
+
+    # Collect unique product IDs
+    product_ids = {item.get("product_id") for item in items if item.get("product_id")}
+
+    # Fetch products concurrently (limit concurrency)
+    semaphore = asyncio.Semaphore(5)
+
+    async def fetch_with_sem(pid: str):
+        async with semaphore:
+            await _fetch_product(client, token, pid, product_cache)
+
+    await asyncio.gather(*[fetch_with_sem(pid) for pid in product_ids])
+
+    # Now compute secondary macros per meal
+    meal_macros: dict[str, dict[str, float]] = {}
+    for key in MEAL_KEYS:
+        meal_macros[key] = {"sugar": 0.0, "fiber": 0.0, "saturated": 0.0, "salt": 0.0}
+
+    for item in items:
+        product_id = item.get("product_id")
+        amount = item.get("amount", 0)  # in grams
+        daytime = item.get("daytime", 4)  # default to snack
+        meal_key = _DAYTIME_TO_MEAL.get(daytime, "snack")
+
+        product = product_cache.get(product_id)
+        if not product:
+            continue
+
+        nutrients = product.get("nutrients", {})
+        for yazio_key, our_key in _SECONDARY_NUTRIENT_KEYS.items():
+            per_gram = nutrients.get(yazio_key, 0) or 0
+            meal_macros[meal_key][our_key] += per_gram * amount
+
+    # Round values
+    for meal_key in meal_macros:
+        for k, v in meal_macros[meal_key].items():
+            meal_macros[meal_key][k] = round(v, 2 if k == "salt" else 1)
+
+    return meal_macros
 
 
 def _parse_profile(raw: dict, summary_user: dict) -> dict:
@@ -204,7 +317,23 @@ async def fetch_yazio_summary(email: str, password: str, target_date: Optional[d
         # Fetch full user profile for name, height, goal, diet etc.
         raw_profile = await _fetch_user_profile(client, token)
 
+        # Fetch secondary macros (sugar, fiber, saturated, salt) via consumed-items + products
+        secondary = await _compute_secondary_macros(client, token, date_str)
+
     result = _parse_summary(raw)
+
+    # Merge secondary macros into meals and totals
+    if secondary:
+        for meal_key in MEAL_KEYS:
+            if meal_key in secondary and meal_key in result["meals"]:
+                for nutrient_key, value in secondary[meal_key].items():
+                    result["meals"][meal_key][nutrient_key] = value
+        # Recompute totals for secondary macros from the merged meal data
+        for nutrient_key in ("sugar", "fiber", "saturated", "salt"):
+            total = sum(
+                result["meals"].get(mk, {}).get(nutrient_key, 0) for mk in MEAL_KEYS
+            )
+            result["totals"][nutrient_key] = round(total, 2 if nutrient_key == "salt" else 1)
 
     # Merge profile data
     summary_user = raw.get("user", {})
