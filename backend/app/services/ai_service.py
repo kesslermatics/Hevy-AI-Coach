@@ -1156,10 +1156,7 @@ async def generate_nutrition_analysis(
     language: str = "de",
 ) -> dict:
     """
-    Generate AI nutrition analysis with three sections:
-    1. Yesterday's analysis (what was good/bad)
-    2. Today's tips (based on current intake + remaining goals)
-    3. Overall patterns and suggestions
+    Generate a comprehensive AI nutrition analysis covering yesterday, today, goals, and recommendations.
     """
     client = genai.Client(api_key=settings.gemini_api_key)
 
@@ -1169,84 +1166,93 @@ async def generate_nutrition_analysis(
     if yazio_yesterday:
         totals = yazio_yesterday.get("totals", {})
         goals = yazio_yesterday.get("goals", {})
-        context_parts.append("=== YESTERDAY'S NUTRITION ===")
-        context_parts.append(f"Consumed: {totals.get('calories', 0)} kcal | "
-                             f"P: {totals.get('protein', 0)}g | C: {totals.get('carbs', 0)}g | F: {totals.get('fat', 0)}g")
-        context_parts.append(f"Secondary: Sugar: {totals.get('sugar', 0)}g | Fiber: {totals.get('fiber', 0)}g | "
-                             f"Sat. Fat: {totals.get('saturated', 0)}g | Salt: {totals.get('salt', 0)}g")
-        context_parts.append(f"Goals: {goals.get('calories', 0)} kcal | P: {goals.get('protein', 0)}g | "
-                             f"C: {goals.get('carbs', 0)}g | F: {goals.get('fat', 0)}g")
+        context_parts.append("=== GESTERN / YESTERDAY ===")
+        context_parts.append(f"Gegessen: {totals.get('calories', 0):.0f} kcal (Ziel: {goals.get('calories', 0):.0f} kcal)")
+        context_parts.append(f"Protein: {totals.get('protein', 0):.0f}g (Ziel: {goals.get('protein', 0):.0f}g)")
+        context_parts.append(f"Kohlenhydrate: {totals.get('carbs', 0):.0f}g (Ziel: {goals.get('carbs', 0):.0f}g)")
+        context_parts.append(f"Fett: {totals.get('fat', 0):.0f}g (Ziel: {goals.get('fat', 0):.0f}g)")
+        context_parts.append(f"Zucker: {totals.get('sugar', 0):.0f}g | Ballaststoffe: {totals.get('fiber', 0):.0f}g | "
+                             f"Gesättigte Fettsäuren: {totals.get('saturated', 0):.0f}g | Salz: {totals.get('salt', 0):.1f}g")
 
         y_food = yazio_yesterday.get("food_items", {})
         if y_food:
-            context_parts.append("\nYesterday's foods:")
+            context_parts.append("\nGestern gegessen:")
             for meal_key in ["breakfast", "lunch", "dinner", "snack"]:
                 items = y_food.get(meal_key, [])
                 if items:
-                    context_parts.append(f"  {meal_key.capitalize()}:")
-                    for fi in items:
-                        context_parts.append(f"    - {fi['name']} ({fi['amount']}g): "
-                                             f"{fi['calories']} kcal, P:{fi['protein']}g")
+                    meal_names = {"breakfast": "Frühstück", "lunch": "Mittagessen", "dinner": "Abendessen", "snack": "Snacks"}
+                    context_parts.append(f"  {meal_names.get(meal_key, meal_key)}:")
+                    for fi in items[:10]:  # Limit to 10 items per meal
+                        context_parts.append(f"    - {fi['name']} ({fi['amount']:.0f}g): "
+                                             f"{fi['calories']:.0f} kcal, P:{fi['protein']:.0f}g, K:{fi.get('carbs', 0):.0f}g, F:{fi.get('fat', 0):.0f}g")
 
     if yazio_today:
         t_totals = yazio_today.get("totals", {})
         t_goals = yazio_today.get("goals", {})
-        context_parts.append("\n=== TODAY'S NUTRITION SO FAR ===")
-        context_parts.append(f"Eaten: {t_totals.get('calories', 0)} kcal | "
-                             f"P: {t_totals.get('protein', 0)}g | C: {t_totals.get('carbs', 0)}g | F: {t_totals.get('fat', 0)}g")
+        context_parts.append("\n=== HEUTE / TODAY ===")
+        context_parts.append(f"Bisher gegessen: {t_totals.get('calories', 0):.0f} kcal (Ziel: {t_goals.get('calories', 0):.0f} kcal)")
+        context_parts.append(f"Protein: {t_totals.get('protein', 0):.0f}g (Ziel: {t_goals.get('protein', 0):.0f}g)")
+        context_parts.append(f"Kohlenhydrate: {t_totals.get('carbs', 0):.0f}g (Ziel: {t_goals.get('carbs', 0):.0f}g)")
+        context_parts.append(f"Fett: {t_totals.get('fat', 0):.0f}g (Ziel: {t_goals.get('fat', 0):.0f}g)")
+        
         remaining_cal = max(0, t_goals.get('calories', 0) - t_totals.get('calories', 0))
         remaining_protein = max(0, t_goals.get('protein', 0) - t_totals.get('protein', 0))
-        context_parts.append(f"Remaining: {remaining_cal:.0f} kcal | P: {remaining_protein:.0f}g")
+        remaining_carbs = max(0, t_goals.get('carbs', 0) - t_totals.get('carbs', 0))
+        remaining_fat = max(0, t_goals.get('fat', 0) - t_totals.get('fat', 0))
+        context_parts.append(f"\nNoch übrig heute: {remaining_cal:.0f} kcal | P: {remaining_protein:.0f}g | K: {remaining_carbs:.0f}g | F: {remaining_fat:.0f}g")
 
         t_food = yazio_today.get("food_items", {})
         if t_food:
-            context_parts.append("\nToday's foods so far:")
+            context_parts.append("\nHeute gegessen:")
             for meal_key in ["breakfast", "lunch", "dinner", "snack"]:
                 items = t_food.get(meal_key, [])
                 if items:
-                    context_parts.append(f"  {meal_key.capitalize()}:")
-                    for fi in items:
-                        context_parts.append(f"    - {fi['name']} ({fi['amount']}g): "
-                                             f"{fi['calories']} kcal, P:{fi['protein']}g")
+                    meal_names = {"breakfast": "Frühstück", "lunch": "Mittagessen", "dinner": "Abendessen", "snack": "Snacks"}
+                    context_parts.append(f"  {meal_names.get(meal_key, meal_key)}:")
+                    for fi in items[:10]:
+                        context_parts.append(f"    - {fi['name']} ({fi['amount']:.0f}g): "
+                                             f"{fi['calories']:.0f} kcal, P:{fi['protein']:.0f}g")
 
     lang_instruction = _language_instruction(language)
 
-    system_prompt = f"""You are a nutrition analyst. Analyze the user's nutrition data and provide helpful, actionable insights.
+    system_prompt = f"""Du bist ein erfahrener Ernährungsberater und Fitness-Coach. Analysiere die Ernährungsdaten des Nutzers und erstelle eine ausführliche, personalisierte Analyse.
 
 {chr(10).join(context_parts)}
 
-Generate a JSON response with ALL THREE sections (all are required):
-1. "yesterday_analysis": A concise analysis of yesterday's nutrition (2-4 sentences). What was good? What could be improved? Reference specific foods if relevant.
-2. "today_tips": Specific tips for the rest of today (2-4 sentences). Based on what's been eaten and what's remaining. Suggest protein-rich foods if protein is low, etc. If no data for today yet, give general tips based on yesterday's patterns.
-3. "overall_patterns": General observations and suggestions (2-4 sentences). Patterns you notice, areas for improvement, positive habits to maintain.
+Schreibe eine AUSFÜHRLICHE Ernährungsanalyse (mindestens 200-300 Wörter) die folgendes abdeckt:
 
-IMPORTANT: You MUST provide content for ALL THREE fields. Do not leave any field empty.
-Be specific, motivating, and practical. Reference actual foods from the data when possible.
+1. **Gestrige Bilanz**: Wie waren die Makros im Vergleich zu den Zielen? Was war gut, was nicht optimal? Welche Lebensmittel haben positiv/negativ beigetragen?
+
+2. **Heutige Situation**: Was wurde heute schon gegessen? Wie sieht die verbleibende Kalorienbilanz aus? Was fehlt noch an Makros?
+
+3. **Konkrete Empfehlungen**: Was sollte der Nutzer heute noch essen, um seine Ziele zu erreichen? Nenne konkrete Lebensmittel oder Mahlzeiten. Wenn Protein fehlt: schlage proteinreiche Optionen vor. Wenn zu viel Fett: empfehle leichtere Alternativen.
+
+4. **Tipps & Beobachtungen**: Gibt es Muster? Zu viel Zucker/Salz? Zu wenig Ballaststoffe? Gib praktische Tipps.
+
+Sei motivierend aber ehrlich. Beziehe dich auf konkrete Lebensmittel aus den Daten. Schreibe in einem freundlichen, coachenden Ton.
 {lang_instruction}
 
-Respond ONLY with valid JSON. All string values must be on a single line (no line breaks inside strings):
-{{"yesterday_analysis": "Your analysis here...", "today_tips": "Your tips here...", "overall_patterns": "Your patterns here..."}}"""
+Antworte NUR mit einem JSON-Objekt in diesem Format (der Text muss in einer Zeile sein, keine Zeilenumbrüche im String):
+{{"analysis": "Deine ausführliche Analyse hier..."}}"""
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-2.0-flash",
             contents=system_prompt,
             config=types.GenerateContentConfig(
-                temperature=0.6,
-                max_output_tokens=1024,
+                temperature=0.7,
+                max_output_tokens=2048,
             ),
         )
 
         text = response.text
         if not text:
             return {
-                "yesterday_analysis": "Keine Analyse verfügbar.",
-                "today_tips": "Keine Tipps verfügbar.",
-                "overall_patterns": "Keine Muster erkannt.",
+                "analysis": "Keine Analyse verfügbar.",
             }
 
         # Log raw response for debugging
-        logger.info("Gemini nutrition raw response (first 800 chars): %s", text[:800])
+        logger.info("Gemini nutrition raw response (first 1000 chars): %s", text[:1000])
 
         # Parse JSON - handle markdown code blocks
         text = text.strip()
@@ -1256,12 +1262,9 @@ Respond ONLY with valid JSON. All string values must be on a single line (no lin
             # Remove closing code block
             text = re.sub(r'\n?```\s*$', '', text)
         
-        # Primary approach: Extract each field individually with regex
-        # This is more robust than trying to parse the full JSON
+        # Extract the "analysis" field
         def extract_field(field_name: str, source: str) -> str:
             """Extract a JSON string field value, handling multiline and special chars."""
-            # Pattern: "field_name" : "value" where value may contain escaped quotes
-            # We look for the field, then capture everything until the next unescaped quote
             pattern = rf'"{field_name}"\s*:\s*"'
             match = re.search(pattern, source)
             if not match:
@@ -1287,45 +1290,27 @@ Respond ONLY with valid JSON. All string values must be on a single line (no lin
             
             value = ''.join(result_chars)
             # Unescape common escape sequences
-            value = value.replace('\\n', ' ').replace('\\r', '').replace('\\"', '"').replace('\\\\', '\\')
-            # Replace actual newlines with spaces
-            value = value.replace('\n', ' ').replace('\r', '')
-            # Clean up multiple spaces
-            value = re.sub(r'\s+', ' ', value).strip()
-            return value
+            value = value.replace('\\n', '\n').replace('\\r', '').replace('\\"', '"').replace('\\\\', '\\')
+            # Replace actual \r with nothing
+            value = value.replace('\r', '')
+            return value.strip()
         
-        yesterday = extract_field("yesterday_analysis", text)
-        today = extract_field("today_tips", text)
-        overall = extract_field("overall_patterns", text)
+        analysis = extract_field("analysis", text)
         
-        # If we got at least one field, return the result
-        if yesterday or today or overall:
-            return {
-                "yesterday_analysis": yesterday or "Keine Analyse verfügbar.",
-                "today_tips": today or "Keine Tipps verfügbar.",
-                "overall_patterns": overall or "Keine Muster erkannt.",
-            }
+        if analysis:
+            return {"analysis": analysis}
         
-        # Last fallback: try standard JSON parse (unlikely to work if above failed)
+        # Fallback: try standard JSON parse
         try:
             parsed = json.loads(text)
-            return {
-                "yesterday_analysis": parsed.get("yesterday_analysis", "Keine Analyse."),
-                "today_tips": parsed.get("today_tips", "Keine Tipps."),
-                "overall_patterns": parsed.get("overall_patterns", "Keine Muster."),
-            }
+            return {"analysis": parsed.get("analysis", "Keine Analyse verfügbar.")}
         except json.JSONDecodeError:
             logger.warning("All JSON parsing methods failed for nutrition analysis")
-            return {
-                "yesterday_analysis": "Analyse konnte nicht gelesen werden.",
-                "today_tips": "Tipps konnten nicht gelesen werden.",
-                "overall_patterns": "Muster konnten nicht erkannt werden.",
-            }
+            # Return raw text if nothing else works
+            if len(text) > 50:
+                return {"analysis": text}
+            return {"analysis": "Analyse konnte nicht gelesen werden."}
 
     except Exception as exc:
         logger.error("Gemini nutrition analysis error: %s", exc)
-        return {
-            "yesterday_analysis": "Analyse konnte nicht generiert werden.",
-            "today_tips": "Tipps konnten nicht generiert werden.",
-            "overall_patterns": "Muster konnten nicht erkannt werden.",
-        }
+        return {"analysis": "Analyse konnte nicht generiert werden."}

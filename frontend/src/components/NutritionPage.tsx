@@ -425,23 +425,8 @@ export default function NutritionPage() {
                 </div>
 
                 {analysis ? (
-                    <div className="space-y-4">
-                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4">
-                            <h3 className="text-amber-400 font-semibold text-sm mb-2">{t('nutrition.yesterdayTips')}</h3>
-                            <p className="text-cream-200 text-sm leading-relaxed">{analysis.yesterday_analysis}</p>
-                        </div>
-                        {analysis.today_tips && analysis.today_tips !== 'Keine Tipps.' && (
-                            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-4">
-                                <h3 className="text-emerald-400 font-semibold text-sm mb-2">{t('nutrition.todayTips')}</h3>
-                                <p className="text-cream-200 text-sm leading-relaxed">{analysis.today_tips}</p>
-                            </div>
-                        )}
-                        {analysis.overall_patterns && analysis.overall_patterns !== 'Keine Muster.' && (
-                            <div className="bg-violet-500/10 border border-violet-500/20 rounded-xl p-4">
-                                <h3 className="text-violet-400 font-semibold text-sm mb-2">{t('nutrition.overallAnalysis')}</h3>
-                                <p className="text-cream-200 text-sm leading-relaxed">{analysis.overall_patterns}</p>
-                            </div>
-                        )}
+                    <div className="bg-gradient-to-br from-purple-500/10 to-violet-500/10 border border-purple-500/20 rounded-xl p-5">
+                        <p className="text-cream-200 text-sm leading-relaxed whitespace-pre-line">{analysis.analysis}</p>
                     </div>
                 ) : loadingAnalysis ? (
                     <div className="h-32 flex items-center justify-center">

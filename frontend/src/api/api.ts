@@ -574,9 +574,7 @@ export const getFoodStatistics = (days = 30) =>
 /* ── Nutrition Analysis (AI) ────────────────────────── */
 
 export interface NutritionAnalysis {
-  yesterday_analysis: string;
-  today_tips: string;
-  overall_patterns: string;
+  analysis: string;
 }
 
 export const getNutritionAnalysis = () =>
