@@ -1237,11 +1237,11 @@ Antworte NUR mit einem JSON-Objekt in diesem Format (der Text muss in einer Zeil
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-2.0-flash",
             contents=system_prompt,
             config=types.GenerateContentConfig(
                 temperature=0.7,
-                max_output_tokens=2048,
+                max_output_tokens=4096,
             ),
         )
 
@@ -1296,6 +1296,7 @@ Antworte NUR mit einem JSON-Objekt in diesem Format (der Text muss in einer Zeil
             return value.strip()
         
         analysis = extract_field("analysis", text)
+        logger.info("Extracted analysis (first 200 chars): %s", analysis[:200] if analysis else "EMPTY")
         
         if analysis:
             return {"analysis": analysis}
