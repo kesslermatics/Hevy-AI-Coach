@@ -1246,7 +1246,7 @@ Respond ONLY with valid JSON. All string values must be on a single line (no lin
             }
 
         # Log raw response for debugging
-        logger.debug("Gemini nutrition raw response: %s", text[:500])
+        logger.info("Gemini nutrition raw response (first 800 chars): %s", text[:800])
 
         # Parse JSON - handle markdown code blocks
         text = text.strip()
@@ -1256,66 +1256,71 @@ Respond ONLY with valid JSON. All string values must be on a single line (no lin
             # Remove closing code block
             text = re.sub(r'\n?```\s*$', '', text)
         
-        # Find JSON object bounds
-        start_idx = text.find('{')
-        end_idx = text.rfind('}')
-        
-        if start_idx != -1 and end_idx > start_idx:
-            json_str = text[start_idx:end_idx + 1]
+        # Primary approach: Extract each field individually with regex
+        # This is more robust than trying to parse the full JSON
+        def extract_field(field_name: str, source: str) -> str:
+            """Extract a JSON string field value, handling multiline and special chars."""
+            # Pattern: "field_name" : "value" where value may contain escaped quotes
+            # We look for the field, then capture everything until the next unescaped quote
+            pattern = rf'"{field_name}"\s*:\s*"'
+            match = re.search(pattern, source)
+            if not match:
+                return ""
             
-            # Fix unescaped newlines inside JSON strings
-            # Replace actual newlines with escaped \n (but not after a backslash)
-            # This is a common issue with LLM JSON output
-            def fix_json_strings(s: str) -> str:
-                result = []
-                in_string = False
-                i = 0
-                while i < len(s):
-                    char = s[i]
-                    if char == '"' and (i == 0 or s[i-1] != '\\'):
-                        in_string = not in_string
-                        result.append(char)
-                    elif char == '\n' and in_string:
-                        result.append('\\n')
-                    elif char == '\r' and in_string:
-                        result.append('')  # Skip carriage returns
-                    else:
-                        result.append(char)
-                    i += 1
-                return ''.join(result)
+            start = match.end()
+            result_chars = []
+            i = start
+            while i < len(source):
+                char = source[i]
+                if char == '"':
+                    # Check if escaped
+                    num_backslashes = 0
+                    j = i - 1
+                    while j >= start and source[j] == '\\':
+                        num_backslashes += 1
+                        j -= 1
+                    if num_backslashes % 2 == 0:
+                        # Not escaped, this is the closing quote
+                        break
+                result_chars.append(char)
+                i += 1
             
-            fixed_json = fix_json_strings(json_str)
-            
-            try:
-                parsed = json.loads(fixed_json)
-                # Ensure all fields are present
-                return {
-                    "yesterday_analysis": parsed.get("yesterday_analysis", "Keine Analyse verfügbar."),
-                    "today_tips": parsed.get("today_tips", "Keine Tipps verfügbar."),
-                    "overall_patterns": parsed.get("overall_patterns", "Keine Muster erkannt."),
-                }
-            except json.JSONDecodeError as e:
-                logger.warning("JSON decode failed after fix: %s. Raw json_str: %s", e, json_str[:300])
+            value = ''.join(result_chars)
+            # Unescape common escape sequences
+            value = value.replace('\\n', ' ').replace('\\r', '').replace('\\"', '"').replace('\\\\', '\\')
+            # Replace actual newlines with spaces
+            value = value.replace('\n', ' ').replace('\r', '')
+            # Clean up multiple spaces
+            value = re.sub(r'\s+', ' ', value).strip()
+            return value
         
-        # Fallback: Extract values with regex
-        result = {}
-        for key in ["yesterday_analysis", "today_tips", "overall_patterns"]:
-            match = re.search(rf'"{key}"\s*:\s*"((?:[^"\\]|\\.)*)?"', text, re.DOTALL)
-            if match:
-                # Unescape the value
-                value = match.group(1) if match.group(1) else ""
-                value = value.replace('\\n', ' ').replace('\\r', '').replace('\\"', '"')
-                result[key] = value.strip()
+        yesterday = extract_field("yesterday_analysis", text)
+        today = extract_field("today_tips", text)
+        overall = extract_field("overall_patterns", text)
         
-        if result:
+        # If we got at least one field, return the result
+        if yesterday or today or overall:
             return {
-                "yesterday_analysis": result.get("yesterday_analysis", "Keine Analyse."),
-                "today_tips": result.get("today_tips", "Keine Tipps."),
-                "overall_patterns": result.get("overall_patterns", "Keine Muster."),
+                "yesterday_analysis": yesterday or "Keine Analyse verfügbar.",
+                "today_tips": today or "Keine Tipps verfügbar.",
+                "overall_patterns": overall or "Keine Muster erkannt.",
             }
-
-        # Last resort: direct parse
-        return json.loads(text.strip())
+        
+        # Last fallback: try standard JSON parse (unlikely to work if above failed)
+        try:
+            parsed = json.loads(text)
+            return {
+                "yesterday_analysis": parsed.get("yesterday_analysis", "Keine Analyse."),
+                "today_tips": parsed.get("today_tips", "Keine Tipps."),
+                "overall_patterns": parsed.get("overall_patterns", "Keine Muster."),
+            }
+        except json.JSONDecodeError:
+            logger.warning("All JSON parsing methods failed for nutrition analysis")
+            return {
+                "yesterday_analysis": "Analyse konnte nicht gelesen werden.",
+                "today_tips": "Tipps konnten nicht gelesen werden.",
+                "overall_patterns": "Muster konnten nicht erkannt werden.",
+            }
 
     except Exception as exc:
         logger.error("Gemini nutrition analysis error: %s", exc)
