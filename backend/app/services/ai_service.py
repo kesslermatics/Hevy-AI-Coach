@@ -1215,16 +1215,17 @@ async def generate_nutrition_analysis(
 
 {chr(10).join(context_parts)}
 
-Generate a JSON response with three sections:
+Generate a JSON response with ALL THREE sections (all are required):
 1. "yesterday_analysis": A concise analysis of yesterday's nutrition (2-4 sentences). What was good? What could be improved? Reference specific foods if relevant.
-2. "today_tips": Specific tips for the rest of today (2-4 sentences). Based on what's been eaten and what's remaining. Suggest protein-rich foods if protein is low, etc.
-3. "overall_patterns": General observations and suggestions (2-4 sentences). Patterns you notice, areas for improvement, positive habits.
+2. "today_tips": Specific tips for the rest of today (2-4 sentences). Based on what's been eaten and what's remaining. Suggest protein-rich foods if protein is low, etc. If no data for today yet, give general tips based on yesterday's patterns.
+3. "overall_patterns": General observations and suggestions (2-4 sentences). Patterns you notice, areas for improvement, positive habits to maintain.
 
+IMPORTANT: You MUST provide content for ALL THREE fields. Do not leave any field empty.
 Be specific, motivating, and practical. Reference actual foods from the data when possible.
 {lang_instruction}
 
-Respond ONLY with valid JSON in this exact format:
-{{"yesterday_analysis": "...", "today_tips": "...", "overall_patterns": "..."}}"""
+Respond ONLY with valid JSON. All string values must be on a single line (no line breaks inside strings):
+{{"yesterday_analysis": "Your analysis here...", "today_tips": "Your tips here...", "overall_patterns": "Your patterns here..."}}"""
 
     try:
         response = await client.aio.models.generate_content(
@@ -1286,9 +1287,15 @@ Respond ONLY with valid JSON in this exact format:
             fixed_json = fix_json_strings(json_str)
             
             try:
-                return json.loads(fixed_json)
+                parsed = json.loads(fixed_json)
+                # Ensure all fields are present
+                return {
+                    "yesterday_analysis": parsed.get("yesterday_analysis", "Keine Analyse verfügbar."),
+                    "today_tips": parsed.get("today_tips", "Keine Tipps verfügbar."),
+                    "overall_patterns": parsed.get("overall_patterns", "Keine Muster erkannt."),
+                }
             except json.JSONDecodeError as e:
-                logger.warning("JSON decode failed after fix: %s. Trying regex extraction.", e)
+                logger.warning("JSON decode failed after fix: %s. Raw json_str: %s", e, json_str[:300])
         
         # Fallback: Extract values with regex
         result = {}
