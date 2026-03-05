@@ -1237,7 +1237,7 @@ Antworte NUR mit einem JSON-Objekt in diesem Format (der Text muss in einer Zeil
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-3.5-flash-preview",
+            model="gemini-3-flash-preview",
             contents=system_prompt,
             config=types.GenerateContentConfig(
                 temperature=0.7,
