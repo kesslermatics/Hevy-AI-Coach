@@ -198,7 +198,7 @@ export default function NutritionPage() {
                             <Tooltip
                                 contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px' }}
                                 labelStyle={{ color: '#fafaf5' }}
-                                formatter={(value: number) => [`${Math.round(value)} kcal`, '']}
+                                formatter={(value) => [`${Math.round(Number(value ?? 0))} kcal`, '']}
                             />
                             <Legend />
                             <Line type="monotone" dataKey="calories" name={t('dashboard.calories')} stroke={COLORS.calories} strokeWidth={2} dot={{ r: 3 }} />
@@ -232,7 +232,7 @@ export default function NutritionPage() {
                             <Tooltip
                                 contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px' }}
                                 labelStyle={{ color: '#fafaf5' }}
-                                formatter={(value: number) => [`${Math.round(value)}g`, '']}
+                                formatter={(value) => [`${Math.round(Number(value ?? 0))}g`, '']}
                             />
                             <Legend />
                             <Line type="monotone" dataKey="protein" name={t('dashboard.protein')} stroke={COLORS.protein} strokeWidth={2} dot={{ r: 3 }} />
@@ -316,7 +316,7 @@ export default function NutritionPage() {
                                 <YAxis type="category" dataKey="name" stroke="#666" fontSize={11} width={60} />
                                 <Tooltip
                                     contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px' }}
-                                    formatter={(value: number) => [`${Math.round(value)}g`, '']}
+                                    formatter={(value) => [`${Math.round(Number(value ?? 0))}g`, '']}
                                 />
                                 <Legend />
                                 <Bar dataKey="protein" name={t('dashboard.protein')} stackId="a" fill={COLORS.protein} />
@@ -513,7 +513,7 @@ export default function NutritionPage() {
                                         <YAxis type="category" dataKey="name" stroke="#666" fontSize={10} width={80} tick={{ fontSize: 9 }} />
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', fontSize: 12 }}
-                                            formatter={(value: number) => [`${Math.round(value)}g`, t('dashboard.protein')]}
+                                            formatter={(value) => [`${Math.round(Number(value ?? 0))}g`, t('dashboard.protein')]}
                                         />
                                         <Bar dataKey="protein_g" fill="#ef4444" radius={[0, 4, 4, 0]} />
                                     </BarChart>
@@ -533,7 +533,7 @@ export default function NutritionPage() {
                                         <YAxis type="category" dataKey="name" stroke="#666" fontSize={10} width={80} tick={{ fontSize: 9 }} />
                                         <Tooltip
                                             contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: '8px', fontSize: 12 }}
-                                            formatter={(value: number) => [`${Math.round(value)} kcal`, t('dashboard.calories')]}
+                                            formatter={(value) => [`${Math.round(Number(value ?? 0))} kcal`, t('dashboard.calories')]}
                                         />
                                         <Bar dataKey="calories" fill="#f97316" radius={[0, 4, 4, 0]} />
                                     </BarChart>
