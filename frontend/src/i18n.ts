@@ -228,9 +228,8 @@ const translations = {
 
     /* ── Tab Navigation ───────────────────────────────── */
     'tabs.dashboard': { de: 'Dashboard', en: 'Dashboard' },
-    'tabs.progress': { de: 'Fortschritt', en: 'Progress' },
+    'tabs.nutrition': { de: 'Ernährung', en: 'Nutrition' },
     'tabs.achievements': { de: 'Erfolge', en: 'Achievements' },
-    'tabs.reports': { de: 'Reports', en: 'Reports' },
 
     /* ── Streaks ──────────────────────────────────────── */
     'streaks.title': { de: 'Wochen-Streaks', en: 'Weekly Streaks' },
@@ -288,6 +287,36 @@ const translations = {
     'reports.noData': { de: 'Keine Daten für diesen Zeitraum.', en: 'No data for this period.' },
     'reports.duration': { de: 'Trainingsdauer', en: 'Training Duration' },
     'reports.previous': { de: 'Vorheriger Zeitraum', en: 'Previous period' },
+
+    /* ── Nutrition Page ────────────────────────────────── */
+    'nutrition.title': { de: 'Ernährung', en: 'Nutrition' },
+    'nutrition.subtitle': { de: 'Deine Ernährungsdaten im Detail', en: 'Your nutrition data in detail' },
+    'nutrition.period7': { de: '7 Tage', en: '7 Days' },
+    'nutrition.period14': { de: '14 Tage', en: '14 Days' },
+    'nutrition.period30': { de: '30 Tage', en: '30 Days' },
+    'nutrition.macroTrend': { de: 'Makro-Trend', en: 'Macro Trend' },
+    'nutrition.caloriesByMeal': { de: 'Kalorien nach Mahlzeit', en: 'Calories by Meal' },
+    'nutrition.macrosByMeal': { de: 'Makros pro Mahlzeit', en: 'Macros per Meal' },
+    'nutrition.foodItems': { de: 'Lebensmittel heute', en: "Today's Food Items" },
+    'nutrition.foodItemsYesterday': { de: 'Lebensmittel gestern', en: "Yesterday's Food Items" },
+    'nutrition.breakfast': { de: 'Frühstück', en: 'Breakfast' },
+    'nutrition.lunch': { de: 'Mittagessen', en: 'Lunch' },
+    'nutrition.dinner': { de: 'Abendessen', en: 'Dinner' },
+    'nutrition.snack': { de: 'Snacks', en: 'Snacks' },
+    'nutrition.topFoods': { de: 'Top Lebensmittel', en: 'Top Foods' },
+    'nutrition.topProtein': { de: 'Top Protein-Quellen', en: 'Top Protein Sources' },
+    'nutrition.topCalories': { de: 'Kalorien-Bomben', en: 'Calorie Bombs' },
+    'nutrition.topBrands': { de: 'Häufigste Marken', en: 'Most Common Brands' },
+    'nutrition.newThisWeek': { de: 'Neu diese Woche', en: 'New This Week' },
+    'nutrition.aiAnalysis': { de: 'KI-Analyse', en: 'AI Analysis' },
+    'nutrition.yesterdayTips': { de: 'Analyse Gestern', en: 'Yesterday Analysis' },
+    'nutrition.todayTips': { de: 'Tipps für Heute', en: 'Tips for Today' },
+    'nutrition.overallAnalysis': { de: 'Gesamtanalyse', en: 'Overall Analysis' },
+    'nutrition.noData': { de: 'Keine Ernährungsdaten vorhanden', en: 'No nutrition data available' },
+    'nutrition.loading': { de: 'Lade Daten...', en: 'Loading data...' },
+    'nutrition.times': { de: 'mal', en: 'times' },
+    'nutrition.avgPerDay': { de: 'Ø pro Tag', en: 'Avg per day' },
+    'nutrition.goal': { de: 'Ziel', en: 'Goal' },
 
     /* ── Today's Nutrition ────────────────────────────── */
     'today.title': { de: 'Ernährung heute', en: "Today's Nutrition" },

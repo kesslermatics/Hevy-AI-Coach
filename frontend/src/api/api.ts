@@ -488,13 +488,98 @@ export interface NutritionMacros {
   sugar: number; fiber: number; saturated: number; salt: number;
 }
 
+export interface FoodItem {
+  name: string;
+  brand: string;
+  amount: number;
+  serving: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+}
+
 export interface TodayNutrition {
   totals: NutritionMacros;
   goals: NutritionMacros;
   meals: Record<string, NutritionMacros>;
+  food_items?: Record<string, FoodItem[]>;
   water_ml: number;
   error?: string;
 }
 
 export const getTodayNutrition = () =>
   apiRequest<TodayNutrition>('/api/briefing/today-nutrition');
+
+/* ── Nutrition History ──────────────────────────────── */
+
+export interface NutritionDay {
+  date: string;
+  totals: NutritionMacros;
+  goals: NutritionMacros;
+}
+
+export interface NutritionHistoryData {
+  days: NutritionDay[];
+  error?: string;
+}
+
+export const getNutritionHistory = (days = 7) =>
+  apiRequest<NutritionHistoryData>(`/api/briefing/nutrition-history?days=${days}`);
+
+/* ── Food Statistics ────────────────────────────────── */
+
+export interface TopFood {
+  name: string;
+  brand: string;
+  count: number;
+}
+
+export interface TopProteinFood {
+  name: string;
+  brand: string;
+  protein_g: number;
+}
+
+export interface TopCalorieFood {
+  name: string;
+  brand: string;
+  calories: number;
+}
+
+export interface TopBrand {
+  brand: string;
+  count: number;
+}
+
+export interface NewFood {
+  name: string;
+  brand: string;
+  first_seen: string;
+}
+
+export interface FoodStatisticsData {
+  top_foods: TopFood[];
+  top_protein: TopProteinFood[];
+  top_calories: TopCalorieFood[];
+  top_brands: TopBrand[];
+  new_this_week: NewFood[];
+  days_analyzed: number;
+  error?: string;
+}
+
+export const getFoodStatistics = (days = 30) =>
+  apiRequest<FoodStatisticsData>(`/api/briefing/food-statistics?days=${days}`);
+
+/* ── Nutrition Analysis (AI) ────────────────────────── */
+
+export interface NutritionAnalysis {
+  yesterday_analysis: string;
+  today_tips: string;
+  overall_patterns: string;
+}
+
+export const getNutritionAnalysis = () =>
+  apiRequest<NutritionAnalysis>('/api/briefing/nutrition-analysis', {
+    method: 'POST',
+  });

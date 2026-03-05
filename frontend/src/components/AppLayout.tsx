@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Outlet, useNavigate, NavLink, useLocation } from 'react-router-dom';
 import { getMe, logoutUser, isAuthenticated } from '../api/api';
 import type { UserInfo } from '../api/api';
-import { Dumbbell, LogOut, Home, Settings, Loader2, TrendingUp, Trophy, BarChart3 } from 'lucide-react';
+import { Dumbbell, LogOut, Home, Settings, Loader2, Trophy, UtensilsCrossed } from 'lucide-react';
 import { LanguageContext } from '../i18n';
 import { useLanguage } from '../i18n';
 import type { Lang } from '../i18n';
@@ -82,12 +82,12 @@ function NavItems({ onLogout }: { onLogout: () => void }) {
                 <Home size={16} />
                 <span className="hidden sm:inline">{t('nav.home')}</span>
             </NavLink>
-            <NavLink to="/progress"
+            <NavLink to="/nutrition"
                 className={({ isActive }) =>
                     `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'text-gold-400 bg-dark-700' : 'text-dark-300 hover:text-cream-100'}`
                 }>
-                <TrendingUp size={16} />
-                <span className="hidden sm:inline">{t('tabs.progress')}</span>
+                <UtensilsCrossed size={16} />
+                <span className="hidden sm:inline">{t('tabs.nutrition')}</span>
             </NavLink>
             <NavLink to="/achievements"
                 className={({ isActive }) =>
@@ -95,13 +95,6 @@ function NavItems({ onLogout }: { onLogout: () => void }) {
                 }>
                 <Trophy size={16} />
                 <span className="hidden sm:inline">{t('tabs.achievements')}</span>
-            </NavLink>
-            <NavLink to="/reports"
-                className={({ isActive }) =>
-                    `flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${isActive ? 'text-gold-400 bg-dark-700' : 'text-dark-300 hover:text-cream-100'}`
-                }>
-                <BarChart3 size={16} />
-                <span className="hidden sm:inline">{t('tabs.reports')}</span>
             </NavLink>
             <NavLink to="/settings"
                 className={({ isActive }) =>

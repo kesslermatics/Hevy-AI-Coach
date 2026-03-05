@@ -132,17 +132,19 @@ async def _fetch_product(
 
 async def _compute_secondary_macros(
     client: httpx.AsyncClient, token: str, target_date: str
-) -> dict[str, dict[str, float]]:
+) -> tuple[dict[str, dict[str, float]], dict[str, list[dict]]]:
     """
     Fetch consumed-items for a date, resolve each product, and compute
     secondary macros (sugar, fiber, saturated fat, salt) per meal.
 
-    Returns a dict keyed by meal name (breakfast/lunch/dinner/snack)
-    with values like {"sugar": 12.3, "fiber": 5.1, "saturated": 3.2, "salt": 1.8}.
+    Returns a tuple of:
+      1) meal_macros: dict keyed by meal name with secondary macro values
+      2) food_items: dict keyed by meal name with list of food item dicts
+         e.g. {"breakfast": [{"name": "Milk", "amount": 200, "serving": "ml", "calories": 130, ...}]}
     """
     items = await _fetch_consumed_items(client, token, target_date)
     if not items:
-        return {}
+        return {}, {}
 
     product_cache: dict[str, Optional[dict]] = {}
 
@@ -158,10 +160,12 @@ async def _compute_secondary_macros(
 
     await asyncio.gather(*[fetch_with_sem(pid) for pid in product_ids])
 
-    # Now compute secondary macros per meal
+    # Now compute secondary macros per meal and collect food items
     meal_macros: dict[str, dict[str, float]] = {}
+    food_items: dict[str, list[dict]] = {}
     for key in MEAL_KEYS:
         meal_macros[key] = {"sugar": 0.0, "fiber": 0.0, "saturated": 0.0, "salt": 0.0}
+        food_items[key] = []
 
     for item in items:
         product_id = item.get("product_id")
@@ -178,12 +182,28 @@ async def _compute_secondary_macros(
             per_gram = nutrients.get(yazio_key, 0) or 0
             meal_macros[meal_key][our_key] += per_gram * amount
 
+        # Collect food item info
+        cal_per_g = nutrients.get("energy.energy", 0) or 0
+        prot_per_g = nutrients.get("nutrient.protein", 0) or 0
+        carb_per_g = nutrients.get("nutrient.carb", 0) or 0
+        fat_per_g = nutrients.get("nutrient.fat", 0) or 0
+        food_items[meal_key].append({
+            "name": product.get("name", "Unknown"),
+            "brand": product.get("producer", ""),
+            "amount": amount,
+            "serving": item.get("serving", "g"),
+            "calories": round(cal_per_g * amount, 1),
+            "protein": round(prot_per_g * amount, 1),
+            "carbs": round(carb_per_g * amount, 1),
+            "fat": round(fat_per_g * amount, 1),
+        })
+
     # Round values
     for meal_key in meal_macros:
         for k, v in meal_macros[meal_key].items():
             meal_macros[meal_key][k] = round(v, 2 if k == "salt" else 1)
 
-    return meal_macros
+    return meal_macros, food_items
 
 
 def _parse_profile(raw: dict, summary_user: dict) -> dict:
@@ -317,7 +337,7 @@ async def fetch_yazio_summary(email: str, password: str, target_date: Optional[d
         raw_profile = await _fetch_user_profile(client, token)
 
         # Fetch secondary macros (sugar, fiber, saturated, salt) via consumed-items + products
-        secondary = await _compute_secondary_macros(client, token, date_str)
+        secondary, food_items = await _compute_secondary_macros(client, token, date_str)
 
     result = _parse_summary(raw)
 
@@ -333,6 +353,10 @@ async def fetch_yazio_summary(email: str, password: str, target_date: Optional[d
                 result["meals"].get(mk, {}).get(nutrient_key, 0) for mk in MEAL_KEYS
             )
             result["totals"][nutrient_key] = round(total, 2 if nutrient_key == "salt" else 1)
+
+    # Include individual food items per meal (for chat context)
+    if food_items:
+        result["food_items"] = food_items
 
     # Merge profile data
     summary_user = raw.get("user", {})

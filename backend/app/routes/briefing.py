@@ -856,8 +856,220 @@ async def get_today_nutrition(
             "totals": data.get("totals", {}),
             "goals": data.get("goals", {}),
             "meals": data.get("meals", {}),
+            "food_items": data.get("food_items", {}),
             "water_ml": data.get("water_ml", 0),
         }
     except Exception as exc:
         logger.error("Failed to fetch today's nutrition: %s", exc)
         return {"error": str(exc)}
+
+
+@router.get("/nutrition-history")
+async def get_nutrition_history(
+    days: int = 7,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get nutrition history for the last N days.
+    Returns daily totals + goals for charting.
+    """
+    if not current_user.yazio_email or not current_user.yazio_password:
+        return {"error": "No Yazio credentials", "days": []}
+
+    days = min(max(days, 1), 90)  # Clamp 1-90
+
+    try:
+        email = decrypt_value(current_user.yazio_email)
+        password = decrypt_value(current_user.yazio_password)
+    except Exception:
+        return {"error": "Decryption failed", "days": []}
+
+    import asyncio
+    import httpx
+    from app.services.yazio_service import _yazio_login, _fetch_daily_summary, _parse_summary, YAZIO_BASE_URL
+
+    history = []
+    today = date.today()
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        token = await _yazio_login(client, email, password)
+        if not token:
+            return {"error": "Yazio login failed", "days": []}
+
+        semaphore = asyncio.Semaphore(5)
+
+        async def fetch_day(d: date):
+            async with semaphore:
+                raw = await _fetch_daily_summary(client, token, d.isoformat())
+                if not raw:
+                    return None
+                parsed = _parse_summary(raw)
+                return {
+                    "date": d.isoformat(),
+                    "totals": parsed.get("totals", {}),
+                    "goals": parsed.get("goals", {}),
+                }
+
+        dates_to_check = [today - timedelta(days=i) for i in range(days)]
+        results = await asyncio.gather(*[fetch_day(d) for d in dates_to_check])
+
+        history = [r for r in results if r is not None]
+
+    # Sort by date ascending
+    history.sort(key=lambda x: x["date"])
+
+    return {"days": history}
+
+
+@router.get("/food-statistics")
+async def get_food_statistics(
+    days: int = 30,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get aggregated food statistics for the last N days.
+    Returns top foods, top protein sources, top calorie items, top brands, new items this week.
+    """
+    if not current_user.yazio_email or not current_user.yazio_password:
+        return {"error": "No Yazio credentials"}
+
+    days = min(max(days, 7), 90)
+
+    try:
+        email = decrypt_value(current_user.yazio_email)
+        password = decrypt_value(current_user.yazio_password)
+    except Exception:
+        return {"error": "Decryption failed"}
+
+    import asyncio
+    import httpx
+    from collections import Counter, defaultdict
+    from app.services.yazio_service import (
+        _yazio_login, _fetch_consumed_items, _fetch_product, YAZIO_BASE_URL
+    )
+
+    today = date.today()
+
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        token = await _yazio_login(client, email, password)
+        if not token:
+            return {"error": "Yazio login failed"}
+
+        # Fetch consumed items for each day
+        semaphore = asyncio.Semaphore(5)
+        all_items = []  # List of (date, product_id, amount)
+
+        async def fetch_day(d: date):
+            async with semaphore:
+                items = await _fetch_consumed_items(client, token, d.isoformat())
+                return [(d.isoformat(), item.get("product_id"), item.get("amount", 0))
+                        for item in items if item.get("product_id")]
+
+        dates_to_check = [today - timedelta(days=i) for i in range(days)]
+        results = await asyncio.gather(*[fetch_day(d) for d in dates_to_check])
+
+        for day_items in results:
+            all_items.extend(day_items)
+
+        # Collect unique product IDs
+        product_ids = {item[1] for item in all_items}
+        product_cache = {}
+
+        async def fetch_with_sem(pid: str):
+            async with semaphore:
+                await _fetch_product(client, token, pid, product_cache)
+
+        await asyncio.gather(*[fetch_with_sem(pid) for pid in product_ids])
+
+    # Aggregate statistics
+    food_frequency = Counter()  # product_id -> count
+    food_names = {}  # product_id -> name
+    food_brands = {}  # product_id -> brand
+    protein_total = defaultdict(float)  # product_id -> total protein
+    calorie_total = defaultdict(float)  # product_id -> total calories
+    first_seen = {}  # product_id -> first date seen
+
+    for date_str, product_id, amount in all_items:
+        food_frequency[product_id] += 1
+
+        product = product_cache.get(product_id)
+        if not product:
+            continue
+
+        food_names[product_id] = product.get("name", "Unknown")
+        food_brands[product_id] = product.get("producer", "")
+
+        nutrients = product.get("nutrients", {})
+        protein_total[product_id] += (nutrients.get("nutrient.protein", 0) or 0) * amount
+        calorie_total[product_id] += (nutrients.get("energy.energy", 0) or 0) * amount
+
+        if product_id not in first_seen:
+            first_seen[product_id] = date_str
+
+    # Top 10 most frequent foods
+    top_foods = [
+        {"name": food_names.get(pid, "Unknown"), "brand": food_brands.get(pid, ""), "count": count}
+        for pid, count in food_frequency.most_common(10)
+    ]
+
+    # Top 10 protein sources (by total protein consumed)
+    top_protein = sorted(
+        [(pid, protein_total[pid]) for pid in protein_total],
+        key=lambda x: x[1], reverse=True
+    )[:10]
+    top_protein_list = [
+        {"name": food_names.get(pid, "Unknown"), "brand": food_brands.get(pid, ""), "protein_g": round(total, 1)}
+        for pid, total in top_protein
+    ]
+
+    # Top 10 calorie bombs (by total calories consumed)
+    top_calories = sorted(
+        [(pid, calorie_total[pid]) for pid in calorie_total],
+        key=lambda x: x[1], reverse=True
+    )[:10]
+    top_calories_list = [
+        {"name": food_names.get(pid, "Unknown"), "brand": food_brands.get(pid, ""), "calories": round(total, 0)}
+        for pid, total in top_calories
+    ]
+
+    # Top brands
+    brand_frequency = Counter(food_brands.get(pid, "") for pid in food_frequency if food_brands.get(pid, ""))
+    top_brands = [{"brand": brand, "count": count} for brand, count in brand_frequency.most_common(10)]
+
+    # New this week (first seen in last 7 days)
+    week_ago = (today - timedelta(days=7)).isoformat()
+    new_this_week = [
+        {"name": food_names.get(pid, "Unknown"), "brand": food_brands.get(pid, ""), "first_seen": first_seen[pid]}
+        for pid in first_seen
+        if first_seen[pid] >= week_ago
+    ]
+
+    return {
+        "top_foods": top_foods,
+        "top_protein": top_protein_list,
+        "top_calories": top_calories_list,
+        "top_brands": top_brands,
+        "new_this_week": new_this_week,
+        "days_analyzed": days,
+    }
+
+
+@router.post("/nutrition-analysis")
+async def get_nutrition_analysis(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    AI-powered nutrition analysis.
+    Returns analysis for yesterday, tips for today, and overall patterns.
+    """
+    from app.services.ai_service import generate_nutrition_analysis
+
+    context = await gather_user_context(current_user)
+
+    response = await generate_nutrition_analysis(
+        yazio_yesterday=context.get("yazio"),
+        yazio_today=context.get("yazio_today"),
+        language=current_user.language or "de",
+    )
+
+    return response

@@ -324,60 +324,60 @@ export default function Dashboard() {
                         const calPct = nt.goals.calories > 0 ? Math.min(nt.totals.calories / nt.goals.calories, 1) : 0;
                         const calRemaining = Math.max(0, nt.goals.calories - nt.totals.calories);
                         return (
-                        <div className="card-glass p-5 space-y-4">
-                            {/* Header */}
-                            <div className="flex items-center gap-3">
-                                <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
-                                    <UtensilsCrossed className="w-5 h-5" />
-                                </div>
-                                <div className="flex-1">
-                                    <h2 className="text-sm font-semibold text-cream-50">{t('today.title')}</h2>
-                                    <p className="text-xs text-dark-300">{t('today.soFar')}</p>
-                                </div>
-                            </div>
-
-                            {/* Calories hero */}
-                            <div className="relative">
-                                <div className="flex items-baseline justify-between mb-1.5">
-                                    <div className="flex items-center gap-1.5 text-orange-400">
-                                        <Flame className="w-4 h-4" />
-                                        <span className="text-xs font-semibold uppercase tracking-wide">{t('dashboard.calories')}</span>
+                            <div className="card-glass p-5 space-y-4">
+                                {/* Header */}
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl border flex items-center justify-center bg-emerald-500/10 border-emerald-500/30 text-emerald-400">
+                                        <UtensilsCrossed className="w-5 h-5" />
                                     </div>
-                                    <div className="text-right">
-                                        <span className="text-lg font-bold text-cream-50">{Math.round(nt.totals.calories)}</span>
-                                        <span className="text-xs text-dark-400 ml-1">/ {Math.round(nt.goals.calories)} kcal</span>
+                                    <div className="flex-1">
+                                        <h2 className="text-sm font-semibold text-cream-50">{t('today.title')}</h2>
+                                        <p className="text-xs text-dark-300">{t('today.soFar')}</p>
                                     </div>
                                 </div>
-                                <div className="h-2.5 rounded-full bg-white/[0.06] overflow-hidden">
-                                    <div className="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-700 ease-out"
-                                        style={{ width: `${calPct * 100}%` }} />
+
+                                {/* Calories hero */}
+                                <div className="relative">
+                                    <div className="flex items-baseline justify-between mb-1.5">
+                                        <div className="flex items-center gap-1.5 text-orange-400">
+                                            <Flame className="w-4 h-4" />
+                                            <span className="text-xs font-semibold uppercase tracking-wide">{t('dashboard.calories')}</span>
+                                        </div>
+                                        <div className="text-right">
+                                            <span className="text-lg font-bold text-cream-50">{Math.round(nt.totals.calories)}</span>
+                                            <span className="text-xs text-dark-200 ml-1">/ {Math.round(nt.goals.calories)} kcal</span>
+                                        </div>
+                                    </div>
+                                    <div className="h-2.5 rounded-full bg-white/[0.06] overflow-hidden">
+                                        <div className="h-full rounded-full bg-gradient-to-r from-orange-500 to-amber-400 transition-all duration-700 ease-out"
+                                            style={{ width: `${calPct * 100}%` }} />
+                                    </div>
+                                    <p className="text-[10px] text-dark-200 mt-1 text-right">
+                                        {calRemaining > 0 ? `${Math.round(calRemaining)} kcal ${t('today.remaining')}` : '✓'}
+                                    </p>
                                 </div>
-                                <p className="text-[10px] text-dark-400 mt-1 text-right">
-                                    {calRemaining > 0 ? `${Math.round(calRemaining)} kcal ${t('today.remaining')}` : '✓'}
-                                </p>
-                            </div>
 
-                            {/* Main macros — 3 column bars */}
-                            <div className="grid grid-cols-3 gap-3">
-                                <NutritionBar label={t('dashboard.protein')} current={nt.totals.protein} goal={nt.goals.protein}
-                                    color="from-red-500 to-rose-400" textColor="text-red-400" unit="g" />
-                                <NutritionBar label={t('dashboard.carbs')} current={nt.totals.carbs} goal={nt.goals.carbs}
-                                    color="from-yellow-500 to-amber-300" textColor="text-yellow-400" unit="g" />
-                                <NutritionBar label={t('dashboard.fat')} current={nt.totals.fat} goal={nt.goals.fat}
-                                    color="from-emerald-500 to-teal-400" textColor="text-emerald-400" unit="g" />
-                            </div>
+                                {/* Main macros — 3 column bars */}
+                                <div className="grid grid-cols-3 gap-3">
+                                    <NutritionBar label={t('dashboard.protein')} current={nt.totals.protein} goal={nt.goals.protein}
+                                        color="from-red-500 to-rose-400" textColor="text-red-400" unit="g" />
+                                    <NutritionBar label={t('dashboard.carbs')} current={nt.totals.carbs} goal={nt.goals.carbs}
+                                        color="from-yellow-500 to-amber-300" textColor="text-yellow-400" unit="g" />
+                                    <NutritionBar label={t('dashboard.fat')} current={nt.totals.fat} goal={nt.goals.fat}
+                                        color="from-emerald-500 to-teal-400" textColor="text-emerald-400" unit="g" />
+                                </div>
 
-                            {/* Divider */}
-                            <div className="border-t border-white/[0.06]" />
+                                {/* Divider */}
+                                <div className="border-t border-white/[0.06]" />
 
-                            {/* Secondary macros — compact row */}
-                            <div className="grid grid-cols-4 gap-2">
-                                <NutritionMini label={t('dashboard.sugar')} value={nt.totals.sugar} unit="g" color="text-pink-400" />
-                                <NutritionMini label={t('dashboard.fiber')} value={nt.totals.fiber} unit="g" color="text-lime-400" />
-                                <NutritionMini label={t('dashboard.saturated')} value={nt.totals.saturated} unit="g" color="text-violet-400" />
-                                <NutritionMini label={t('dashboard.salt')} value={nt.totals.salt} unit="g" color="text-sky-400" />
+                                {/* Secondary macros — compact row */}
+                                <div className="grid grid-cols-4 gap-2">
+                                    <NutritionMini label={t('dashboard.sugar')} value={nt.totals.sugar} unit="g" color="text-pink-400" />
+                                    <NutritionMini label={t('dashboard.fiber')} value={nt.totals.fiber} unit="g" color="text-lime-400" />
+                                    <NutritionMini label={t('dashboard.saturated')} value={nt.totals.saturated} unit="g" color="text-violet-400" />
+                                    <NutritionMini label={t('dashboard.salt')} value={nt.totals.salt} unit="g" color="text-sky-400" />
+                                </div>
                             </div>
-                        </div>
                         );
                     })()}
 
@@ -1309,7 +1309,7 @@ function NutritionBar({ label, current, goal, color, textColor, unit }: {
         <div>
             <div className="flex items-baseline justify-between mb-1">
                 <span className={`text-[10px] font-semibold uppercase tracking-wide ${textColor}`}>{label}</span>
-                <span className="text-[10px] text-dark-400">{Math.round(current)}/{Math.round(goal)}{unit}</span>
+                <span className="text-[10px] text-dark-200">{Math.round(current)}/{Math.round(goal)}{unit}</span>
             </div>
             <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                 <div className={`h-full rounded-full bg-gradient-to-r ${color} transition-all duration-700 ease-out`}
@@ -1326,9 +1326,9 @@ function NutritionMini({ label, value, unit, color }: {
     return (
         <div className="text-center py-1.5 px-1 rounded-lg bg-white/[0.03]">
             <p className={`text-sm font-bold ${color}`}>
-                {value < 10 ? value.toFixed(1) : Math.round(value)}<span className="text-[9px] font-normal text-dark-400 ml-0.5">{unit}</span>
+                {value < 10 ? value.toFixed(1) : Math.round(value)}<span className="text-[9px] font-normal text-dark-200 ml-0.5">{unit}</span>
             </p>
-            <p className="text-[9px] text-dark-400 mt-0.5 leading-tight">{label}</p>
+            <p className="text-[9px] text-dark-200 mt-0.5 leading-tight">{label}</p>
         </div>
     );
 }
@@ -1343,7 +1343,7 @@ function MiniStreak({ label, icon, current, color, bg }: {
             <div className={`${color}`}>{icon}</div>
             <div className="min-w-0">
                 <p className={`text-lg font-bold leading-none ${color}`}>{current}</p>
-                <p className="text-[9px] text-dark-400 truncate">{label} {t('streaks.weeks')}</p>
+                <p className="text-[9px] text-dark-200 truncate">{label} {t('streaks.weeks')}</p>
             </div>
         </div>
     );

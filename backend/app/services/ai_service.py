@@ -1042,7 +1042,11 @@ async def generate_chat_response(
         context_parts.append(f"Consumed: {totals.get('calories', 0)} kcal | "
                              f"P: {totals.get('protein', 0)}g | "
                              f"C: {totals.get('carbs', 0)}g | "
-                             f"F: {totals.get('fat', 0)}g")
+                             f"F: {totals.get('fat', 0)}g | "
+                             f"Sugar: {totals.get('sugar', 0)}g | "
+                             f"Fiber: {totals.get('fiber', 0)}g | "
+                             f"Sat. Fat: {totals.get('saturated', 0)}g | "
+                             f"Salt: {totals.get('salt', 0)}g")
         context_parts.append(f"Goals (DAILY TARGET): {goals.get('calories', 0)} kcal | "
                              f"P: {goals.get('protein', 0)}g | "
                              f"C: {goals.get('carbs', 0)}g | "
@@ -1055,7 +1059,11 @@ async def generate_chat_response(
         context_parts.append(f"Eaten so far: {t_totals.get('calories', 0)} kcal | "
                              f"P: {t_totals.get('protein', 0)}g | "
                              f"C: {t_totals.get('carbs', 0)}g | "
-                             f"F: {t_totals.get('fat', 0)}g")
+                             f"F: {t_totals.get('fat', 0)}g | "
+                             f"Sugar: {t_totals.get('sugar', 0)}g | "
+                             f"Fiber: {t_totals.get('fiber', 0)}g | "
+                             f"Sat. Fat: {t_totals.get('saturated', 0)}g | "
+                             f"Salt: {t_totals.get('salt', 0)}g")
         context_parts.append(f"Today's Goals (DAILY TARGET): {t_goals.get('calories', 0)} kcal | "
                              f"P: {t_goals.get('protein', 0)}g | "
                              f"C: {t_goals.get('carbs', 0)}g | "
@@ -1064,6 +1072,19 @@ async def generate_chat_response(
         remaining_protein = t_goals.get('protein', 0) - t_totals.get('protein', 0)
         context_parts.append(f"Remaining today: {max(0, remaining_cal):.0f} kcal | "
                              f"P: {max(0, remaining_protein):.0f}g")
+        # Include individual food items from today
+        t_food = today_nutrition.get("food_items", {})
+        if t_food:
+            context_parts.append("Today's meals (individual items):")
+            for meal_key in ["breakfast", "lunch", "dinner", "snack"]:
+                items = t_food.get(meal_key, [])
+                if items:
+                    meal_label = meal_key.capitalize()
+                    item_strs = [f"  - {fi['name']}" + (f" ({fi['brand']})" if fi.get('brand') else "") +
+                                 f" {fi['amount']}g: {fi['calories']} kcal, P:{fi['protein']}g, C:{fi['carbs']}g, F:{fi['fat']}g"
+                                 for fi in items]
+                    context_parts.append(f"  {meal_label}:")
+                    context_parts.extend(item_strs)
 
     # Build Gemini conversation with context as first user message
     contents: list[types.Content] = []
@@ -1114,3 +1135,117 @@ async def generate_chat_response(
     except Exception as exc:
         logger.error("Gemini chat error: %s", exc)
         return "Sorry, something went wrong. Please try again in a moment."
+
+
+async def generate_nutrition_analysis(
+    yazio_yesterday: Optional[dict],
+    yazio_today: Optional[dict],
+    language: str = "de",
+) -> dict:
+    """
+    Generate AI nutrition analysis with three sections:
+    1. Yesterday's analysis (what was good/bad)
+    2. Today's tips (based on current intake + remaining goals)
+    3. Overall patterns and suggestions
+    """
+    client = genai.Client(api_key=settings.gemini_api_key)
+
+    # Build context
+    context_parts = []
+
+    if yazio_yesterday:
+        totals = yazio_yesterday.get("totals", {})
+        goals = yazio_yesterday.get("goals", {})
+        context_parts.append("=== YESTERDAY'S NUTRITION ===")
+        context_parts.append(f"Consumed: {totals.get('calories', 0)} kcal | "
+                             f"P: {totals.get('protein', 0)}g | C: {totals.get('carbs', 0)}g | F: {totals.get('fat', 0)}g")
+        context_parts.append(f"Secondary: Sugar: {totals.get('sugar', 0)}g | Fiber: {totals.get('fiber', 0)}g | "
+                             f"Sat. Fat: {totals.get('saturated', 0)}g | Salt: {totals.get('salt', 0)}g")
+        context_parts.append(f"Goals: {goals.get('calories', 0)} kcal | P: {goals.get('protein', 0)}g | "
+                             f"C: {goals.get('carbs', 0)}g | F: {goals.get('fat', 0)}g")
+
+        y_food = yazio_yesterday.get("food_items", {})
+        if y_food:
+            context_parts.append("\nYesterday's foods:")
+            for meal_key in ["breakfast", "lunch", "dinner", "snack"]:
+                items = y_food.get(meal_key, [])
+                if items:
+                    context_parts.append(f"  {meal_key.capitalize()}:")
+                    for fi in items:
+                        context_parts.append(f"    - {fi['name']} ({fi['amount']}g): "
+                                             f"{fi['calories']} kcal, P:{fi['protein']}g")
+
+    if yazio_today:
+        t_totals = yazio_today.get("totals", {})
+        t_goals = yazio_today.get("goals", {})
+        context_parts.append("\n=== TODAY'S NUTRITION SO FAR ===")
+        context_parts.append(f"Eaten: {t_totals.get('calories', 0)} kcal | "
+                             f"P: {t_totals.get('protein', 0)}g | C: {t_totals.get('carbs', 0)}g | F: {t_totals.get('fat', 0)}g")
+        remaining_cal = max(0, t_goals.get('calories', 0) - t_totals.get('calories', 0))
+        remaining_protein = max(0, t_goals.get('protein', 0) - t_totals.get('protein', 0))
+        context_parts.append(f"Remaining: {remaining_cal:.0f} kcal | P: {remaining_protein:.0f}g")
+
+        t_food = yazio_today.get("food_items", {})
+        if t_food:
+            context_parts.append("\nToday's foods so far:")
+            for meal_key in ["breakfast", "lunch", "dinner", "snack"]:
+                items = t_food.get(meal_key, [])
+                if items:
+                    context_parts.append(f"  {meal_key.capitalize()}:")
+                    for fi in items:
+                        context_parts.append(f"    - {fi['name']} ({fi['amount']}g): "
+                                             f"{fi['calories']} kcal, P:{fi['protein']}g")
+
+    lang_instruction = _language_instruction(language)
+
+    system_prompt = f"""You are a nutrition analyst. Analyze the user's nutrition data and provide helpful, actionable insights.
+
+{chr(10).join(context_parts)}
+
+Generate a JSON response with three sections:
+1. "yesterday_analysis": A concise analysis of yesterday's nutrition (2-4 sentences). What was good? What could be improved? Reference specific foods if relevant.
+2. "today_tips": Specific tips for the rest of today (2-4 sentences). Based on what's been eaten and what's remaining. Suggest protein-rich foods if protein is low, etc.
+3. "overall_patterns": General observations and suggestions (2-4 sentences). Patterns you notice, areas for improvement, positive habits.
+
+Be specific, motivating, and practical. Reference actual foods from the data when possible.
+{lang_instruction}
+
+Respond ONLY with valid JSON in this exact format:
+{{"yesterday_analysis": "...", "today_tips": "...", "overall_patterns": "..."}}"""
+
+    try:
+        response = await client.aio.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=system_prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.6,
+                max_output_tokens=1024,
+            ),
+        )
+
+        text = response.text
+        if not text:
+            return {
+                "yesterday_analysis": "Keine Analyse verfügbar.",
+                "today_tips": "Keine Tipps verfügbar.",
+                "overall_patterns": "Keine Muster erkannt.",
+            }
+
+        # Parse JSON
+        import json
+        import re
+        # Extract JSON from response (might have markdown code blocks)
+        json_match = re.search(r'\{[^{}]*"yesterday_analysis"[^{}]*\}', text, re.DOTALL)
+        if json_match:
+            return json.loads(json_match.group())
+
+        # Try direct parse
+        return json.loads(text.strip())
+
+    except Exception as exc:
+        logger.error("Gemini nutrition analysis error: %s", exc)
+        return {
+            "yesterday_analysis": "Analyse konnte nicht generiert werden.",
+            "today_tips": "Tipps konnten nicht generiert werden.",
+            "overall_patterns": "Muster konnten nicht erkannt werden.",
+        }
