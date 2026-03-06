@@ -554,11 +554,27 @@ async def coach_chat(
 ):
     """
     Conversational AI Coach chat. The AI knows the user's nutrition, goals,
-    training plan, and recent workouts. It can answer questions about training
-    programming, exercise selection, nutrition, and recovery.
+    training plan (with exercises), and recent workouts. It can answer questions
+    about training programming, exercise selection, nutrition, and recovery.
     """
     # Gather full context
     context = await gather_user_context(current_user)
+
+    # Build enriched training plan: map each plan workout name to its exercises
+    # by finding the most recent Hevy instance of that workout
+    training_plan_enriched: list[dict] | None = None
+    plan_names = current_user.training_plan or []
+    workouts = context.get("hevy") or []
+    if plan_names:
+        training_plan_enriched = []
+        for plan_name in plan_names:
+            exercises: list[str] = []
+            # Find the most recent workout matching this plan name
+            for w in workouts:
+                if w.get("title", "").strip().lower() == plan_name.strip().lower():
+                    exercises = [ex.get("title", "?") for ex in w.get("exercises", [])]
+                    break
+            training_plan_enriched.append({"name": plan_name, "exercises": exercises})
 
     # Convert conversation history to dicts
     history = [{"role": m.role, "content": m.content} for m in body.conversation_history]
@@ -568,9 +584,10 @@ async def coach_chat(
         conversation_history=history,
         yazio_data=context["yazio"],
         hevy_data=context["hevy"],
-        training_plan=current_user.training_plan,
+        training_plan_enriched=training_plan_enriched,
         language=current_user.language or "de",
         today_nutrition=context.get("yazio_today"),
+        day_before_yesterday_nutrition=context.get("yazio_day_before_yesterday"),
     )
 
     return {"response": response_text}

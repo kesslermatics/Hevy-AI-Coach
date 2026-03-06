@@ -4,7 +4,7 @@ Data aggregation service – gathers Yazio + Hevy data for a user.
 Orchestrates the individual API services and handles missing data.
 """
 import logging
-from datetime import date
+from datetime import date, timedelta
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -23,13 +23,15 @@ async def gather_user_context(user: User, include_today_nutrition: bool = True) 
 
     Returns:
         {
-            "yazio": { ... } | None,           # yesterday's data
-            "yazio_today": { ... } | None,     # today's live nutrition
+            "yazio": { ... } | None,                    # yesterday's data
+            "yazio_today": { ... } | None,              # today's live nutrition
+            "yazio_day_before_yesterday": { ... } | None, # day before yesterday
             "hevy":  [ ... ] | None,
         }
     """
     yazio_data: Optional[dict] = None
     yazio_today: Optional[dict] = None
+    yazio_dby: Optional[dict] = None
     hevy_data: Optional[list] = None
 
     # ── Yazio ────────────────────────────────────────────
@@ -40,6 +42,10 @@ async def gather_user_context(user: User, include_today_nutrition: bool = True) 
             yazio_data = await fetch_yazio_summary(email, password)  # yesterday by default
             if include_today_nutrition:
                 yazio_today = await fetch_yazio_summary(email, password, target_date=date.today())
+            # Day before yesterday for extra context
+            yazio_dby = await fetch_yazio_summary(
+                email, password, target_date=date.today() - timedelta(days=2)
+            )
         except Exception as exc:
             logger.error("Failed to gather Yazio data for user %s: %s", user.id, exc)
     else:
@@ -58,5 +64,6 @@ async def gather_user_context(user: User, include_today_nutrition: bool = True) 
     return {
         "yazio": yazio_data,
         "yazio_today": yazio_today,
+        "yazio_day_before_yesterday": yazio_dby,
         "hevy": hevy_data,
     }

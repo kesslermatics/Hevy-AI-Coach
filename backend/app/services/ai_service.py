@@ -944,10 +944,13 @@ def _format_workout(w: dict) -> str:
 
 def _build_chat_system_prompt(
     profile: Optional[dict],
-    training_plan: Optional[list[str]],
+    training_plan_enriched: Optional[list[dict]] = None,
     lang: str = "de",
 ) -> str:
-    """Build the system prompt for the conversational Coach Chat."""
+    """Build the system prompt for the conversational Coach Chat.
+
+    training_plan_enriched: list of {"name": str, "exercises": [str, ...]}
+    """
     p = profile or {}
     name = " ".join(filter(None, [p.get("first_name"), p.get("last_name")])) or "Athlete"
     goal = (p.get("goal") or "general fitness").replace("_", " ")
@@ -971,10 +974,15 @@ def _build_chat_system_prompt(
         context_lines.append(f"Diet: {diet_name}.")
 
     plan_str = ""
-    if training_plan:
+    if training_plan_enriched:
+        plan_lines = []
+        for wp in training_plan_enriched:
+            exercises = ", ".join(wp["exercises"]) if wp.get("exercises") else "(no exercise data yet)"
+            plan_lines.append(f"  • {wp['name']}: {exercises}")
         plan_str = (
             "\n\n=== CURRENT TRAINING PLAN ===\n"
-            f"The user's active training plan consists of these workouts: {', '.join(training_plan)}.\n"
+            "The user's active training plan:\n"
+            + "\n".join(plan_lines) + "\n"
             "Use this plan to give advice that fits their overall program structure."
         )
 
@@ -987,8 +995,8 @@ def _build_chat_system_prompt(
 {plan_str}
 
 You will receive:
-1. The user's training plan and recent workout data (exercises, sets, weights).
-2. Recent nutrition data (may be missing).
+1. The user's training plan (with exercises per workout) and recent workout data.
+2. Recent nutrition data (yesterday + day before yesterday + today's live data).
 3. A conversation history of messages between you and the user.
 
 === YOUR ROLE ===
@@ -1000,9 +1008,17 @@ You will receive:
 - Keep answers concise (2-5 sentences) unless they ask for detailed explanations.
 - You can reference their specific workouts, exercises, and progress.
 - Do NOT give medical advice. Redirect to a doctor if asked.
-- Address the user by first name.
+- You may use markdown formatting (bold, lists, etc.) in your responses.
 
-Respond in plain text (not JSON). Be conversational and natural."""
+=== CONVERSATION STYLE ===
+- Address the user by first name.
+- Only greet the user (e.g. "Hallo Robert!") in your VERY FIRST message of a conversation.
+  After that, skip greetings and get straight to the point — it's a natural chat, not a series of separate emails.
+- Do NOT force workout or exercise references into every answer. Only mention
+  specific workouts or exercises when it is genuinely relevant to the user's question.
+  If they ask about nutrition, talk about nutrition — don't shoehorn in workout names.
+
+Respond in plain text with optional markdown formatting. Be conversational and natural."""
 
     return prompt + _language_instruction(lang)
 
@@ -1012,26 +1028,29 @@ async def generate_chat_response(
     conversation_history: list[dict],
     yazio_data: Optional[dict],
     hevy_data: Optional[list],
-    training_plan: Optional[list[str]] = None,
+    training_plan_enriched: Optional[list[dict]] = None,
     language: str = "de",
     today_nutrition: Optional[dict] = None,
+    day_before_yesterday_nutrition: Optional[dict] = None,
 ) -> str:
     """
     Generate a conversational AI coach response.
     conversation_history: list of {role: 'user'|'assistant', content: str}
+    training_plan_enriched: list of {"name": str, "exercises": [str, ...]}
     """
     client = genai.Client(api_key=settings.gemini_api_key)
 
     profile = yazio_data.get("profile") if yazio_data else None
-    system_prompt = _build_chat_system_prompt(profile, training_plan, lang=language)
+    system_prompt = _build_chat_system_prompt(profile, training_plan_enriched, lang=language)
 
     # Build context message with workout + nutrition data
     context_parts: list[str] = []
 
     if hevy_data:
-        # If training plan set, filter workouts to plan-relevant ones + show all for context
-        context_parts.append(f"=== USER'S RECENT WORKOUTS ({len(hevy_data)} sessions) ===")
-        for i, w in enumerate(hevy_data[:10]):  # Limit to 10 to save tokens
+        # Limit to last 3 sessions to keep context focused
+        recent = hevy_data[:3]
+        context_parts.append(f"=== USER'S LAST {len(recent)} WORKOUTS ===")
+        for i, w in enumerate(recent):
             context_parts.append(f"\nWorkout {i + 1}:")
             context_parts.append(_format_workout(w))
 
@@ -1057,6 +1076,37 @@ async def generate_chat_response(
             context_parts.append("Yesterday's meals (individual items):")
             for meal_key in ["breakfast", "lunch", "dinner", "snack"]:
                 items = y_food.get(meal_key, [])
+                if items:
+                    meal_label = meal_key.capitalize()
+                    item_strs = [f"  - {fi['name']}" + (f" ({fi['brand']})" if fi.get('brand') else "") +
+                                 f" {fi['amount']}g: {fi['calories']} kcal, P:{fi['protein']}g, C:{fi['carbs']}g, F:{fi['fat']}g"
+                                 for fi in items]
+                    context_parts.append(f"  {meal_label}:")
+                    context_parts.extend(item_strs)
+
+    # ── Day before yesterday's nutrition ──────────────
+    if day_before_yesterday_nutrition:
+        dby_totals = day_before_yesterday_nutrition.get("totals", {})
+        dby_goals = day_before_yesterday_nutrition.get("goals", {})
+        context_parts.append("\n=== DAY BEFORE YESTERDAY'S NUTRITION ===")
+        context_parts.append(f"Consumed: {dby_totals.get('calories', 0)} kcal | "
+                             f"P: {dby_totals.get('protein', 0)}g | "
+                             f"C: {dby_totals.get('carbs', 0)}g | "
+                             f"F: {dby_totals.get('fat', 0)}g | "
+                             f"Sugar: {dby_totals.get('sugar', 0)}g | "
+                             f"Fiber: {dby_totals.get('fiber', 0)}g | "
+                             f"Sat. Fat: {dby_totals.get('saturated', 0)}g | "
+                             f"Salt: {dby_totals.get('salt', 0)}g")
+        context_parts.append(f"Goals (DAILY TARGET): {dby_goals.get('calories', 0)} kcal | "
+                             f"P: {dby_goals.get('protein', 0)}g | "
+                             f"C: {dby_goals.get('carbs', 0)}g | "
+                             f"F: {dby_goals.get('fat', 0)}g")
+        # Include individual food items from day before yesterday
+        dby_food = day_before_yesterday_nutrition.get("food_items", {})
+        if dby_food:
+            context_parts.append("Day before yesterday's meals (individual items):")
+            for meal_key in ["breakfast", "lunch", "dinner", "snack"]:
+                items = dby_food.get(meal_key, [])
                 if items:
                     meal_label = meal_key.capitalize()
                     item_strs = [f"  - {fi['name']}" + (f" ({fi['brand']})" if fi.get('brand') else "") +

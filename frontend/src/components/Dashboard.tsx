@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import MuscleHeatmap from './MuscleHeatmap';
 import ActivityHeatmap from './ActivityHeatmap';
+import ReactMarkdown from 'react-markdown';
 import { useLanguage } from '../i18n';
 
 type LayoutContext = { user: UserInfo | null; refreshUser: () => Promise<UserInfo> };
@@ -612,7 +613,13 @@ export default function Dashboard() {
                                                 ? 'bg-blue-500/20 border border-blue-500/30 text-cream-100 rounded-br-md'
                                                 : 'bg-dark-700/60 border border-dark-500/30 text-cream-200 rounded-bl-md'
                                                 }`}>
-                                                <div className="whitespace-pre-wrap">{msg.content}</div>
+                                                {msg.role === 'user' ? (
+                                                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                                                ) : (
+                                                    <div className="prose prose-sm prose-invert max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_strong]:text-gold-300 [&_h1]:text-sm [&_h2]:text-sm [&_h3]:text-xs [&_h1]:mt-2 [&_h2]:mt-2 [&_h3]:mt-1">
+                                                        <ReactMarkdown>{msg.content}</ReactMarkdown>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     ))}
