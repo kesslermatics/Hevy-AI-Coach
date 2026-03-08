@@ -17,7 +17,7 @@ from app.schemas import BriefingResponse
 from app.services.aggregator import gather_user_context
 from app.services.ai_service import generate_daily_briefing, generate_session_review, generate_workout_tips, generate_chat_response
 from app.services.weather_service import fetch_weather
-from app.services.hevy_service import fetch_workout_dates, fetch_recent_workouts
+from app.services.hevy_service import fetch_workout_dates, fetch_recent_workouts, fetch_routines
 from app.services.yazio_service import fetch_nutrition_dates, fetch_yazio_summary
 from app.services.analytics_service import (
     compute_macro_performance_correlation,
@@ -422,6 +422,23 @@ async def get_workout_tips(
             db.commit()
         return existing.tips_data
 
+    # Fetch routine templates from Hevy to get the definitive exercise list
+    routine_exercises = None
+    if current_user.hevy_api_key:
+        try:
+            from app.encryption import decrypt_value
+            api_key = decrypt_value(current_user.hevy_api_key)
+            routines = await fetch_routines(api_key)
+            if routines:
+                # Find matching routine by title (case-insensitive)
+                for r in routines:
+                    if r.get("title", "").strip().lower() == workout_name.lower():
+                        routine_exercises = r.get("exercises", [])
+                        logger.info("Found routine template '%s' with %d exercises", workout_name, len(routine_exercises))
+                        break
+        except Exception as exc:
+            logger.warning("Failed to fetch routines for template matching: %s", exc)
+
     # No pre-generated tips (or old schema) — generate live with coaching memory (last 3)
     previous_reviews = (
         db.query(WorkoutReview)
@@ -441,6 +458,7 @@ async def get_workout_tips(
         workout_name=workout_name,
         language=current_user.language or "de",
         previous_tips_list=previous_tips_list,
+        routine_exercises=routine_exercises,
     )
 
     return result

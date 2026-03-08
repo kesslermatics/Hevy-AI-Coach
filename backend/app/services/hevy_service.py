@@ -90,6 +90,7 @@ def _simplify_workout(w: dict) -> dict:
             "title": ex.get("title", "Unknown Exercise"),
             "muscle_group": ex.get("muscle_group", ""),
             "superset_id": ex.get("superset_id"),
+            "notes": ex.get("notes") or ex.get("note") or "",
             "sets": sets_data,
         })
 
@@ -118,6 +119,80 @@ def _simplify_workout(w: dict) -> dict:
         "duration_min": duration_min,
         "exercises": exercises,
     }
+
+
+async def fetch_routines(api_key: str) -> Optional[list[dict]]:
+    """
+    Fetch ALL workout routine templates from the Hevy API.
+
+    Returns a list of simplified routine dicts:
+      - id, title, folder_id
+      - exercises: [{title, notes, sets: [{type, weight_kg, reps, ...}]}]
+    """
+    headers = {"api-key": api_key, "Accept": "application/json"}
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            all_routines: list[dict] = []
+            page = 1
+
+            while True:
+                resp = await client.get(
+                    f"{HEVY_BASE_URL}/routines",
+                    headers=headers,
+                    params={"page": page, "pageSize": 10},
+                )
+
+                if resp.status_code == 401:
+                    logger.warning("Hevy API key is invalid or expired")
+                    return None
+                if resp.status_code != 200:
+                    logger.warning("Hevy routines failed (HTTP %s): %s", resp.status_code, resp.text[:300])
+                    return None
+
+                data = resp.json()
+                raw_routines = data.get("routines", [])
+
+                if not raw_routines:
+                    break
+
+                for r in raw_routines:
+                    exercises: list[dict] = []
+                    for ex in r.get("exercises", []):
+                        sets_data: list[dict] = []
+                        for s in ex.get("sets", []):
+                            sets_data.append({
+                                "weight_kg": s.get("weight_kg"),
+                                "reps": s.get("reps"),
+                                "distance_meters": s.get("distance_meters"),
+                                "duration_seconds": s.get("duration_seconds"),
+                                "type": s.get("type", "normal"),
+                            })
+                        exercises.append({
+                            "title": ex.get("title", "Unknown Exercise"),
+                            "notes": ex.get("notes") or "",
+                            "superset_id": ex.get("superset_id"),
+                            "sets": sets_data,
+                        })
+
+                    all_routines.append({
+                        "id": r.get("id", ""),
+                        "title": r.get("title", "Routine"),
+                        "folder_id": r.get("folder_id"),
+                        "exercises": exercises,
+                    })
+
+                page_count = data.get("page_count", 1)
+                if page >= page_count:
+                    break
+                page += 1
+
+            logger.info("Fetched %d routines from Hevy", len(all_routines))
+            return all_routines
+
+    except Exception as exc:
+        logger.error("Hevy API error (routines): %s", exc)
+        return None
 
 
 async def fetch_workout_dates(api_key: str, max_pages: int = 10) -> list[dict]:

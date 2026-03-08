@@ -701,7 +701,9 @@ Use their history to make smart decisions, but the output must only contain TARG
    - If they struggled: keep same weight, maybe reduce reps slightly.
    - If stagnated for 3+ sessions: suggest a deload or rep scheme change.
 
-3. **Nutrition awareness**: The user's nutrition phase affects targets.
+3. **Exercise notes**: The user may have added notes (📝) to exercises. These are IMPORTANT constraints — e.g. "only weights 10/15/20/25 available" means you MUST only use those weights. Respect all notes.
+
+4. **Nutrition awareness**: The user's nutrition phase affects targets.
    - Deficit (cutting): conservative targets, maintain strength, don't push PRs.
    - Surplus (bulking): push progressive overload harder.
    - Maintenance: balanced approach.
@@ -746,32 +748,28 @@ async def generate_workout_tips(
     workout_name: str,
     language: str = "de",
     previous_tips_list: Optional[list[dict]] = None,
+    routine_exercises: Optional[list[dict]] = None,
 ) -> dict:
     """
     Call Gemini to generate forward-looking per-set targets for a workout type.
-    Finds the most recent instance of `workout_name` in hevy_data and uses all
-    history as context to produce smart targets for the next session.
+    Uses the Hevy routine template (if available) for the definitive exercise list.
+    Falls back to the most recent session if no routine template is found.
     When previous_tips_list is provided (up to 3), Gemini receives its own past coaching
     outputs for the same workout name, enabling deep continuity ("Coach Memory").
     """
-    if not hevy_data:
+    if not hevy_data and not routine_exercises:
         return FALLBACK_WORKOUT_TIPS
 
-    # Find ALL sessions matching this workout name to build the full exercise template
-    matching_sessions = [w for w in hevy_data if w.get("title", "").strip().lower() == workout_name.strip().lower()]
-
-    # Build a merged exercise list: all unique exercises across all sessions of this workout
-    # This ensures we cover the full template, not just the most recent session
-    seen_exercises: dict[str, dict] = {}  # exercise title -> most recent exercise data
-    for session in matching_sessions:
-        for ex in session.get("exercises", []):
-            ex_title = ex.get("title", "?")
-            if ex_title not in seen_exercises:
-                seen_exercises[ex_title] = ex
-
-    selected = matching_sessions[0] if matching_sessions else {"title": workout_name, "exercises": [], "start_time": ""}
-    # Build a synthetic "full template" workout with all exercises ever done in this workout type
-    full_template_exercises = list(seen_exercises.values())
+    # Prefer the routine template's exercise list (fetched directly from Hevy routines API).
+    # Fall back to the most recent matching session if no routine template was found.
+    if routine_exercises:
+        full_template_exercises = routine_exercises
+        exercise_source = "routine template"
+    else:
+        matching_sessions = [w for w in (hevy_data or []) if w.get("title", "").strip().lower() == workout_name.strip().lower()]
+        selected = matching_sessions[0] if matching_sessions else {"title": workout_name, "exercises": [], "start_time": ""}
+        full_template_exercises = selected.get("exercises", [])
+        exercise_source = "most recent session"
 
     client = genai.Client(api_key=settings.gemini_api_key)
 
@@ -783,8 +781,7 @@ async def generate_workout_tips(
     parts.append(f"=== PLANNED WORKOUT (generate targets for ALL exercises listed below) ===")
     parts.append(f"Workout name: {workout_name}")
     if full_template_exercises:
-        parts.append(f"Full exercise list for this workout template ({len(full_template_exercises)} exercises, collected from {len(matching_sessions)} past session(s)):")
-        # Format each exercise with its most recent set data
+        parts.append(f"Full exercise list for this workout ({len(full_template_exercises)} exercises from {exercise_source}):")
         for ex in full_template_exercises:
             sets_summary = []
             for s in ex.get("sets", []):
@@ -798,7 +795,8 @@ async def generate_workout_tips(
                     sets_summary.append(f"{s['duration_seconds']}s")
             sets_str = ", ".join(sets_summary) if sets_summary else "no set data"
             muscle = f" [{ex.get('muscle_group')}]" if ex.get("muscle_group") else ""
-            parts.append(f"  • {ex.get('title', '?')}{muscle}: {sets_str}")
+            note_str = f"  📝 Note: {ex['notes']}" if ex.get("notes") else ""
+            parts.append(f"  • {ex.get('title', '?')}{muscle}: {sets_str}{note_str}")
     parts.append("")
     parts.append("IMPORTANT: You MUST generate targets for EVERY exercise listed above. Do not skip any.")
     parts.append("")
@@ -934,7 +932,8 @@ def _format_workout(w: dict) -> str:
                 sets_summary.append(f"{s['duration_seconds']}s")
         sets_str = ", ".join(sets_summary) if sets_summary else "no set data"
         muscle = f" [{ex.get('muscle_group')}]" if ex.get("muscle_group") else ""
-        lines.append(f"  • {ex.get('title', '?')}{muscle}: {sets_str}")
+        note_str = f"  📝 Note: {ex['notes']}" if ex.get("notes") else ""
+        lines.append(f"  • {ex.get('title', '?')}{muscle}: {sets_str}{note_str}")
     return "\n".join(lines)
 
 
