@@ -874,7 +874,7 @@ async def generate_workout_tips(
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.7,
-                max_output_tokens=4096,
+                max_output_tokens=8192,
                 response_mime_type="application/json",
             ),
         )
@@ -1229,7 +1229,7 @@ async def generate_chat_response(
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
                 temperature=0.7,
-                max_output_tokens=4096,
+                max_output_tokens=8192,
             ),
         )
 
@@ -1336,7 +1336,7 @@ Antworte NUR mit einem JSON-Objekt in diesem Format (der Text muss in einer Zeil
             contents=system_prompt,
             config=types.GenerateContentConfig(
                 temperature=0.7,
-                max_output_tokens=4096,
+                max_output_tokens=8192,
             ),
         )
 

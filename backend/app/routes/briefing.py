@@ -394,16 +394,32 @@ async def get_workout_tips(
     db: Session = Depends(get_db),
 ):
     """
-    Workout tips — generates forward-looking per-set targets for a workout type.
-    Accepts a workout name (from the user's training plan), finds the most recent
-    instance in Hevy history, and generates targets with coaching memory.
+    Workout tips — forward-looking per-set targets for a workout type.
+    Returns pre-generated tips from scheduler if available, otherwise generates live.
     """
-    context = await gather_user_context(current_user)
-    workouts = context.get("hevy") or []
-
     workout_name = body.workout_name.strip()
     if not workout_name:
         raise HTTPException(status_code=400, detail="Workout name is required")
+
+    # Check if we have pre-generated tips from the scheduler
+    existing = (
+        db.query(WorkoutReview)
+        .filter(
+            WorkoutReview.user_id == current_user.id,
+            WorkoutReview.workout_name == workout_name,
+        )
+        .order_by(WorkoutReview.workout_date.desc())
+        .first()
+    )
+    if existing and existing.tips_data and "exercise_targets" in existing.tips_data:
+        if not existing.is_read:
+            existing.is_read = True
+            db.commit()
+        return existing.tips_data
+
+    # No cached tips — generate live
+    context = await gather_user_context(current_user)
+    workouts = context.get("hevy") or []
 
     # Fetch routine templates from Hevy to get the definitive exercise list
     routine_exercises = None
