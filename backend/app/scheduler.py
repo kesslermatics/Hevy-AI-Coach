@@ -16,8 +16,10 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.models import User, MorningBriefing, WorkoutReview, WeightEntry
+from app.encryption import decrypt_value
 from app.services.aggregator import gather_user_context
 from app.services.ai_service import generate_daily_briefing, generate_session_review, generate_workout_tips
+from app.services.hevy_service import fetch_routines
 
 logger = logging.getLogger(__name__)
 
@@ -162,6 +164,20 @@ async def _generate_workout_review_for_user(user: User, db: Session, max_new_rev
                 previous_reviews=previous_review_list,
             )
 
+            # Fetch routine template for definitive exercise list
+            routine_exercises = None
+            if user.hevy_api_key:
+                try:
+                    api_key = decrypt_value(user.hevy_api_key)
+                    routines = await fetch_routines(api_key)
+                    if routines:
+                        for r in routines:
+                            if r.get("title", "").strip().lower() == workout_name.strip().lower():
+                                routine_exercises = r.get("exercises", [])
+                                break
+                except Exception as exc:
+                    logger.warning("Failed to fetch routines in scheduler: %s", exc)
+
             # Generate workout tips (with coaching memory — last 3)
             tips_data = await generate_workout_tips(
                 yazio_data=context["yazio"],
@@ -169,6 +185,7 @@ async def _generate_workout_review_for_user(user: User, db: Session, max_new_rev
                 workout_name=workout_name,
                 language=lang,
                 previous_tips_list=previous_tips_list,
+                routine_exercises=routine_exercises,
             )
 
             # Save to DB

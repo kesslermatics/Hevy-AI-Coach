@@ -405,23 +405,6 @@ async def get_workout_tips(
     if not workout_name:
         raise HTTPException(status_code=400, detail="Workout name is required")
 
-    # Check if we already have tips in the DB for the most recent instance
-    existing = (
-        db.query(WorkoutReview)
-        .filter(
-            WorkoutReview.user_id == current_user.id,
-            WorkoutReview.workout_name == workout_name,
-        )
-        .order_by(WorkoutReview.workout_date.desc())
-        .first()
-    )
-    if existing and existing.tips_data and "exercise_targets" in existing.tips_data:
-        # Only use cached tips if they match the new schema (exercise_targets)
-        if not existing.is_read:
-            existing.is_read = True
-            db.commit()
-        return existing.tips_data
-
     # Fetch routine templates from Hevy to get the definitive exercise list
     routine_exercises = None
     if current_user.hevy_api_key:
