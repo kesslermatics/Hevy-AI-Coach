@@ -1,0 +1,145 @@
+{
+  "_meta": {
+    "model": "gemini-3-flash-preview",
+    "elapsed_seconds": 20.73,
+    "workout_name": "Sa - Kings With Wings"
+  },
+  "workout_title": "Sa - Kings With Wings",
+  "nutrition_context": "Mit einem ordentlichen Kalorienüberschuss von über 500 kcal und satten 201g Protein hast du gestern die perfekte Grundlage für massiven Muskelaufbau gelegt. Diese Energie ist ideal, um heute bei den schweren Rudereinheiten die Wiederholungszahlen nach oben zu schrauben.",
+  "exercise_targets": [
+    {
+      "name": "Straight Arm Lat Pulldown (Cable)",
+      "set_targets": [
+        {
+          "set_number": 1,
+          "weight_kg": 10,
+          "reps": 12,
+          "note": "Aufwärmen"
+        },
+        {
+          "set_number": 2,
+          "weight_kg": 15,
+          "reps": 10,
+          "note": "Vorbereitung"
+        },
+        {
+          "set_number": 3,
+          "weight_kg": 20,
+          "reps": 12,
+          "note": "Arbeitssatz - Fokus auf die Dehnung"
+        },
+        {
+          "set_number": 4,
+          "weight_kg": 20,
+          "reps": 12,
+          "note": "Arbeitssatz - Sauber durchziehen"
+        }
+      ],
+      "reasoning": "Da es keine 22,5kg gibt, bleibst du bei 20kg und erhöhst die Reps auf 12, um ein solides Fundament für den nächsten Sprung auf 25kg zu bauen."
+    },
+    {
+      "name": "Seated Cable Row - V Grip (Cable)",
+      "set_targets": [
+        {
+          "set_number": 1,
+          "weight_kg": 26,
+          "reps": 10,
+          "note": "Aufwärmen"
+        },
+        {
+          "set_number": 2,
+          "weight_kg": 33,
+          "reps": 8,
+          "note": "Vorbereitung"
+        },
+        {
+          "set_number": 3,
+          "weight_kg": 67,
+          "reps": 8,
+          "note": "Topset - Brust raus!"
+        },
+        {
+          "set_number": 4,
+          "weight_kg": 67,
+          "reps": 8,
+          "note": "Topset - Halte die Spannung"
+        },
+        {
+          "set_number": 5,
+          "weight_kg": 57,
+          "reps": 12,
+          "note": "Back-off - Maximale Kontrolle"
+        }
+      ],
+      "reasoning": "Du hast die 67kg letztes Mal stark mit 7 Reps bewegt; heute knacken wir die 8er-Marke in beiden Topsets, bevor wir irgendwann an die 77kg denken."
+    },
+    {
+      "name": "Face Pull",
+      "set_targets": [
+        {
+          "set_number": 1,
+          "weight_kg": 7.5,
+          "reps": 12,
+          "note": "Aktivierung"
+        },
+        {
+          "set_number": 2,
+          "weight_kg": 15,
+          "reps": 12,
+          "note": "Arbeitssatz"
+        },
+        {
+          "set_number": 3,
+          "weight_kg": 15,
+          "reps": 12,
+          "note": "Arbeitssatz"
+        },
+        {
+          "set_number": 4,
+          "weight_kg": 17.5,
+          "reps": 10,
+          "note": "Letzter Satz - Kraft zeigen"
+        }
+      ],
+      "reasoning": "Du hast die 15kg stabil im Griff, daher gehen wir heute wie geplant im letzten Satz auf 17,5kg hoch, um den Reiz zu steigern."
+    },
+    {
+      "name": "Crunch (Machine)",
+      "set_targets": [
+        {
+          "set_number": 1,
+          "weight_kg": 25,
+          "reps": 12,
+          "note": "Einkommen"
+        },
+        {
+          "set_number": 2,
+          "weight_kg": 30,
+          "reps": 10,
+          "note": "Arbeitssatz"
+        },
+        {
+          "set_number": 3,
+          "weight_kg": 30,
+          "reps": 10,
+          "note": "Arbeitssatz"
+        },
+        {
+          "set_number": 4,
+          "weight_kg": 30,
+          "reps": 10,
+          "note": "Vollgas"
+        }
+      ],
+      "reasoning": "Zuletzt hast du 6-7 Reps geschafft; wir bleiben bei 30kg, bis du die 10er-Marke in allen Sätzen sicher erreichst."
+    }
+  ],
+  "new_exercises_to_try": [
+    {
+      "name": "Assisted Pull-Ups",
+      "why": "Ergänzt dein Rückentraining um eine vertikale Zugkomponente, die perfekt zu deinem Ziel 'Build Muscle' passt.",
+      "suggested_sets_reps": "3×8-10 @ moderates Gegengewicht"
+    }
+  ],
+  "general_advice": "Du hast die Gewichte trotz meiner ungenauen Vorgaben super an die Maschinen-Optionen angepasst – nutze den heutigen Energie-Surplus, um vor allem die exzentrische Phase beim Rudern zu betonen."
+}

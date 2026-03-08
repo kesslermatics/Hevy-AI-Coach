@@ -339,7 +339,7 @@ async def generate_daily_briefing(
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-3.1-pro-preview",
             contents=user_message,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
@@ -576,7 +576,7 @@ async def generate_session_review(
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-3.1-pro-preview",
             contents=user_message,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
@@ -826,28 +826,40 @@ async def generate_workout_tips(
     if yazio_data:
         totals = yazio_data.get("totals", {})
         goals = yazio_data.get("goals", {})
-        parts.append("=== YESTERDAY'S NUTRITION (Yazio) ===")
-        parts.append(f"Consumed: {totals.get('calories', 0)} kcal | "
-                     f"P: {totals.get('protein', 0)}g | "
-                     f"C: {totals.get('carbs', 0)}g | "
-                     f"F: {totals.get('fat', 0)}g")
-        parts.append(f"Goals:    {goals.get('calories', 0)} kcal | "
-                     f"P: {goals.get('protein', 0)}g | "
-                     f"C: {goals.get('carbs', 0)}g | "
-                     f"F: {goals.get('fat', 0)}g")
-        surplus_deficit = totals.get('calories', 0) - goals.get('calories', 0)
+        cal_in = round(totals.get('calories', 0))
+        prot_in = round(totals.get('protein', 0))
+        carb_in = round(totals.get('carbs', 0))
+        fat_in = round(totals.get('fat', 0))
+        cal_goal = round(goals.get('calories', 0))
+        prot_goal = round(goals.get('protein', 0))
+        parts.append("=== YESTERDAY'S NUTRITION ===")
+        parts.append(f"Eaten: {cal_in} kcal (P:{prot_in}g C:{carb_in}g F:{fat_in}g) | Goal: {cal_goal} kcal, P:{prot_goal}g")
+        surplus_deficit = cal_in - cal_goal
         if surplus_deficit > 100:
-            parts.append(f"→ Currently in a surplus of ~{surplus_deficit} kcal over goal.")
+            parts.append(f"→ Surplus ~{surplus_deficit} kcal.")
         elif surplus_deficit < -100:
-            parts.append(f"→ Currently in a deficit of ~{abs(surplus_deficit)} kcal under goal.")
+            parts.append(f"→ Deficit ~{abs(surplus_deficit)} kcal.")
         else:
-            parts.append("→ Roughly at calorie goal (maintenance).")
+            parts.append("→ At maintenance.")
         parts.append("")
 
-    parts.append(f"=== RECENT WORKOUT HISTORY ({len(hevy_data)} total, for context only — do NOT show in output) ===")
-    for i, w in enumerate(hevy_data):
-        parts.append(f"\nWorkout {i + 1}:")
-        parts.append(_format_workout(w))
+    # Only include sessions of the SAME workout type (max 3),
+    # and filter each session to only exercises present in the current template.
+    template_names = {ex.get("title", "").strip().lower() for ex in full_template_exercises} if full_template_exercises else set()
+    relevant_history = matching_sessions[:3]
+    if relevant_history:
+        parts.append(f"=== RECENT SESSIONS OF '{workout_name}' ({len(relevant_history)} of {len(matching_sessions)} total) ===")
+        for i, w in enumerate(relevant_history):
+            filtered_w = dict(w)
+            if template_names:
+                filtered_w["exercises"] = [
+                    ex for ex in w.get("exercises", [])
+                    if ex.get("title", "").strip().lower() in template_names
+                ]
+            parts.append(f"\nSession {i + 1} ({w.get('start_time', 'unknown date')[:10]}):")
+            parts.append(_format_workout(filtered_w))
+    else:
+        parts.append(f"=== NO PREVIOUS SESSIONS of '{workout_name}' found — first time ===")
 
     user_message = "\n".join(parts)
 
@@ -857,7 +869,7 @@ async def generate_workout_tips(
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-3.1-pro-preview",
             contents=user_message,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
@@ -895,42 +907,55 @@ async def generate_workout_tips(
 
 def _format_coaching_memory(previous_data_list: list[dict], memory_type: str = "session_review") -> str:
     """
-    Format up to 3 previous AI coaching outputs as context for the next session.
-    This gives Gemini deep 'memory' of its coaching history for the same workout type.
-    Most recent is listed first.
+    Format previous AI coaching outputs as context for the next session.
+    Most recent session gets FULL detail; older sessions are ultra-compact (one line per exercise).
     """
     count = len(previous_data_list)
-    parts: list[str] = [f"\n\n=== YOUR PREVIOUS COACHING FOR THIS WORKOUT TYPE ({count} session{'s' if count != 1 else ''}) ==="]
-    parts.append("(This is what YOU told the user in their last sessions of this workout type. "
-                 "Reference it! Track multi-session trends. Praise if they followed your advice, "
-                 "remind them if they didn't. Be specific — mention exercises and numbers.)\n")
+    parts: list[str] = [f"\n\n=== YOUR PREVIOUS COACHING ({count} session{'s' if count != 1 else ''}) ==="]
+    parts.append("(Reference your past targets. Praise if followed, adjust if not.)\n")
 
     for idx, previous_data in enumerate(previous_data_list):
-        label = "Most recent" if idx == 0 else f"{idx + 1} sessions ago"
+        is_most_recent = (idx == 0)
+        label = "Last coaching" if is_most_recent else f"{idx + 1} sessions ago"
         parts.append(f"--- {label} ---")
 
         if memory_type == "session_review":
             ls = previous_data.get("last_session")
             if isinstance(ls, dict):
-                parts.append(f"Workout: {ls.get('title', '?')} on {ls.get('date', '?')}")
-                parts.append(f"Your feedback: {ls.get('overall_feedback', '')}")
-                for ex in ls.get("exercises", []):
-                    parts.append(f"  • {ex.get('name', '?')}: best={ex.get('best_set', '?')}, "
-                                 f"e1rm={ex.get('estimated_1rm', '?')}kg, "
-                                 f"you said: \"{ex.get('feedback', '')}\" "
-                                 f"target you set: \"{ex.get('next_target', '')}\"")
+                if is_most_recent:
+                    parts.append(f"Workout: {ls.get('title', '?')} on {ls.get('date', '?')}")
+                    parts.append(f"Your feedback: {ls.get('overall_feedback', '')}")
+                    for ex in ls.get("exercises", []):
+                        parts.append(f"  • {ex.get('name', '?')}: best={ex.get('best_set', '?')}, "
+                                     f"e1rm={ex.get('estimated_1rm', '?')}kg, "
+                                     f"you said: \"{ex.get('feedback', '')}\" "
+                                     f"target you set: \"{ex.get('next_target', '')}\"")
+                else:
+                    # Compact: one line per exercise
+                    for ex in ls.get("exercises", []):
+                        parts.append(f"  {ex.get('name', '?')}: target=\"{ex.get('next_target', '')}\", best={ex.get('best_set', '?')}")
+
         elif memory_type == "workout_tips":
-            parts.append(f"Tips for: {previous_data.get('workout_title', '?')}")
-            for et in previous_data.get("exercise_targets", []):
-                set_targets = et.get("set_targets", [])
-                sets_str = ", ".join(
-                    f"Set {s.get('set_number', '?')}: {s.get('weight_kg', '?')}kg×{s.get('reps', '?')}"
-                    for s in set_targets
-                )
-                parts.append(f"  • {et.get('name', '?')}: your targets were [{sets_str}], "
-                             f"reasoning: \"{et.get('reasoning', '')}\"")
-            if previous_data.get("general_advice"):
-                parts.append(f"  General advice you gave: \"{previous_data['general_advice']}\"")
+            if is_most_recent:
+                # Full detail for the most recent coaching
+                for et in previous_data.get("exercise_targets", []):
+                    set_targets = et.get("set_targets", [])
+                    sets_str = ", ".join(
+                        f"{s.get('weight_kg', '?')}kg×{s.get('reps', '?')}"
+                        for s in set_targets
+                    )
+                    parts.append(f"  • {et.get('name', '?')}: [{sets_str}] — {et.get('reasoning', '')}")
+                if previous_data.get("general_advice"):
+                    parts.append(f"  Advice: {previous_data['general_advice']}")
+            else:
+                # Ultra-compact: one line per exercise, targets only
+                for et in previous_data.get("exercise_targets", []):
+                    set_targets = et.get("set_targets", [])
+                    top_sets = [s for s in set_targets if s.get("note", "").lower() not in ("aufwärmsatz", "warmup", "")]
+                    if not top_sets:
+                        top_sets = set_targets[-2:] if len(set_targets) >= 2 else set_targets
+                    compact = ", ".join(f"{s.get('weight_kg')}kg×{s.get('reps')}" for s in top_sets)
+                    parts.append(f"  {et.get('name', '?')}: {compact}")
         parts.append("")
 
     return "\n".join(parts)
@@ -1199,7 +1224,7 @@ async def generate_chat_response(
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-3.1-pro-preview",
             contents=contents,
             config=types.GenerateContentConfig(
                 system_instruction=system_prompt,
@@ -1307,7 +1332,7 @@ Antworte NUR mit einem JSON-Objekt in diesem Format (der Text muss in einer Zeil
 
     try:
         response = await client.aio.models.generate_content(
-            model="gemini-3-flash-preview",
+            model="gemini-3.1-pro-preview",
             contents=system_prompt,
             config=types.GenerateContentConfig(
                 temperature=0.7,

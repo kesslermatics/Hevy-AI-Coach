@@ -1,0 +1,145 @@
+{
+  "_meta": {
+    "model": "gemini-3.1-pro-preview",
+    "elapsed_seconds": 29.05,
+    "workout_name": "Sa - Kings With Wings"
+  },
+  "workout_title": "Sa - Kings With Wings",
+  "nutrition_context": "Du hast gestern mit 3286 kcal einen perfekten Überschuss von gut 500 kcal erzielt und mit 201g Protein dein Ziel weit übertroffen. Dein Körper ist absolut im anabolen Modus. Diese Energie nutzen wir heute, um bei den fest vorgegebenen Maschinengewichten mehr Wiederholungen herauszukitzeln.",
+  "exercise_targets": [
+    {
+      "name": "Straight Arm Lat Pulldown (Cable)",
+      "set_targets": [
+        {
+          "set_number": 1,
+          "weight_kg": 10,
+          "reps": 10,
+          "note": "Aufwärmsatz"
+        },
+        {
+          "set_number": 2,
+          "weight_kg": 15,
+          "reps": 8,
+          "note": "Aufwärmsatz"
+        },
+        {
+          "set_number": 3,
+          "weight_kg": 25,
+          "reps": 8,
+          "note": "Topset - Alles geben!"
+        },
+        {
+          "set_number": 4,
+          "weight_kg": 20,
+          "reps": 12,
+          "note": "Backdown-Satz"
+        }
+      ],
+      "reasoning": "Da meine alten Zielgewichte an deinem Turm nicht existieren, halten wir uns exakt an deine Liste und pushen die 25kg heute auf 8 Reps statt 6."
+    },
+    {
+      "name": "Seated Cable Row - V Grip (Cable)",
+      "set_targets": [
+        {
+          "set_number": 1,
+          "weight_kg": 26,
+          "reps": 8,
+          "note": "Aufwärmsatz"
+        },
+        {
+          "set_number": 2,
+          "weight_kg": 33,
+          "reps": 6,
+          "note": "Aufwärmsatz"
+        },
+        {
+          "set_number": 3,
+          "weight_kg": 67,
+          "reps": 8,
+          "note": "Topset"
+        },
+        {
+          "set_number": 4,
+          "weight_kg": 67,
+          "reps": 7,
+          "note": "Arbeitssatz"
+        },
+        {
+          "set_number": 5,
+          "weight_kg": 57,
+          "reps": 10,
+          "note": "Backdown-Satz"
+        }
+      ],
+      "reasoning": "Auch hier bleiben wir strikt bei deinen verfügbaren Gewichten; letztes Mal hast du bei 67kg starke 7 Reps geschafft, heute knacken wir die 8."
+    },
+    {
+      "name": "Face Pull",
+      "set_targets": [
+        {
+          "set_number": 1,
+          "weight_kg": 7.5,
+          "reps": 10,
+          "note": "Aufwärmsatz"
+        },
+        {
+          "set_number": 2,
+          "weight_kg": 15,
+          "reps": 10,
+          "note": "Arbeitssatz"
+        },
+        {
+          "set_number": 3,
+          "weight_kg": 15,
+          "reps": 10,
+          "note": "Arbeitssatz"
+        },
+        {
+          "set_number": 4,
+          "weight_kg": 15,
+          "reps": 10,
+          "note": "Letzter Satz"
+        }
+      ],
+      "reasoning": "Zuletzt hast du die 15kg für 10 und 8 Reps bewegt, heute machen wir die 3x10 souverän voll."
+    },
+    {
+      "name": "Crunch (Machine)",
+      "set_targets": [
+        {
+          "set_number": 1,
+          "weight_kg": 25,
+          "reps": 8,
+          "note": "Aufwärmsatz"
+        },
+        {
+          "set_number": 2,
+          "weight_kg": 30,
+          "reps": 8,
+          "note": "Arbeitssatz"
+        },
+        {
+          "set_number": 3,
+          "weight_kg": 30,
+          "reps": 8,
+          "note": "Arbeitssatz"
+        },
+        {
+          "set_number": 4,
+          "weight_kg": 30,
+          "reps": 8,
+          "note": "Letzter Satz"
+        }
+      ],
+      "reasoning": "Du warst zuletzt bei 6 bis 7 Wiederholungen mit 30kg, daher peilen wir heute solide 8 Reps in allen Arbeitssätzen an, bevor wir an die 10 denken."
+    }
+  ],
+  "new_exercises_to_try": [
+    {
+      "name": "Reverse Butterfly (Maschine)",
+      "why": "Stärkt die hintere Schulter noch gezielter und verbessert die Körperhaltung, was optimal zu deinem heutigen Rücken-Fokus passt.",
+      "suggested_sets_reps": "3×12-15 @ moderates Gewicht"
+    }
+  ],
+  "general_advice": "Nutze die massiven 201g Protein und den Kalorienüberschuss von gestern, um in den Topsets mit den vorgegebenen Gewichten neue Wiederholungsrekorde aufzustellen!"
+}
