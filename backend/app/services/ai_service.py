@@ -701,7 +701,10 @@ Use their history to make smart decisions, but the output must only contain TARG
    - If they struggled: keep same weight, maybe reduce reps slightly.
    - If stagnated for 3+ sessions: suggest a deload or rep scheme change.
 
-3. **Exercise notes**: The user may have added notes (📝) to exercises. These are IMPORTANT constraints — e.g. "only weights 10/15/20/25 available" means you MUST only use those weights. Respect all notes.
+3. **Exercise notes are HARD CONSTRAINTS**: The user may have added notes (📝) to exercises. These are NON-NEGOTIABLE constraints that OVERRIDE normal progression logic.
+   - If a note lists available weights (e.g. "only 5 12 19 26 33 40 47 57 67 77 87"), you MUST ONLY suggest weights from that exact list. NEVER suggest intermediate values like 57.5 or 62 — only the exact numbers listed.
+   - If a note specifies equipment limitations, tempo, or technique cues, follow them precisely.
+   - When choosing the next weight from a list, pick the next available step up (or same weight for more reps) — do NOT interpolate between listed values.
 
 4. **Nutrition awareness**: The user's nutrition phase affects targets.
    - Deficit (cutting): conservative targets, maintain strength, don't push PRs.
@@ -762,11 +765,28 @@ async def generate_workout_tips(
 
     # Prefer the routine template's exercise list (fetched directly from Hevy routines API).
     # Fall back to the most recent matching session if no routine template was found.
+    matching_sessions = [w for w in (hevy_data or []) if w.get("title", "").strip().lower() == workout_name.strip().lower()]
+
     if routine_exercises:
         full_template_exercises = routine_exercises
         exercise_source = "routine template"
+
+        # Merge notes from the most recent workout session into the routine template.
+        # Users write notes during training (e.g. "available weights: 57, 67 only"),
+        # but these live in the workout, not the routine template.
+        if matching_sessions:
+            latest_session = matching_sessions[0]
+            workout_notes: dict[str, str] = {}
+            for ex in latest_session.get("exercises", []):
+                note = ex.get("notes") or ex.get("note") or ""
+                if note:
+                    workout_notes[ex.get("title", "").strip().lower()] = note
+            if workout_notes:
+                for ex in full_template_exercises:
+                    ex_key = ex.get("title", "").strip().lower()
+                    if ex_key in workout_notes and not ex.get("notes"):
+                        ex["notes"] = workout_notes[ex_key]
     else:
-        matching_sessions = [w for w in (hevy_data or []) if w.get("title", "").strip().lower() == workout_name.strip().lower()]
         selected = matching_sessions[0] if matching_sessions else {"title": workout_name, "exercises": [], "start_time": ""}
         full_template_exercises = selected.get("exercises", [])
         exercise_source = "most recent session"
@@ -799,6 +819,7 @@ async def generate_workout_tips(
             parts.append(f"  • {ex.get('title', '?')}{muscle}: {sets_str}{note_str}")
     parts.append("")
     parts.append("IMPORTANT: You MUST generate targets for EVERY exercise listed above. Do not skip any.")
+    parts.append("IMPORTANT: If an exercise has a 📝 Note listing available weights, you MUST ONLY use weights from that exact list. Never suggest weights not in the list.")
     parts.append("")
 
     # Add nutrition context if available
