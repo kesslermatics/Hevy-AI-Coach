@@ -458,7 +458,11 @@ Your feedback MUST explain WHY performance changed, not just observe it.
 Always use a supportive, motivating coach tone. Never say "declined" or "stagnated" — reframe negatively:
 
 === COACHING MEMORY (CRITICAL — READ THIS CAREFULLY) ===
-If "YOUR PREVIOUS COACHING" data is provided, this is the MOST IMPORTANT part of your review!
+If "WORKOUT TIPS THE USER ACTUALLY SAW" data is provided, this is the MOST IMPORTANT part of your review!
+These are the EXACT targets the user received in the app before their workout.
+When you say "I told you X" or "my target was X", you MUST use the numbers from "WORKOUT TIPS THE USER ACTUALLY SAW".
+NEVER reference targets from "YOUR PREVIOUS COACHING" when talking about what you recommended — those are your review notes, NOT what the user saw.
+
 You are a personal coach with MEMORY. The user expects you to remember what you said last time.
 
 **overall_feedback MUST START with a progress check** when coaching memory is available:
@@ -557,12 +561,15 @@ async def generate_session_review(
     hevy_data: Optional[list],
     language: str = "de",
     previous_reviews: Optional[list[dict]] = None,
+    previous_tips: Optional[list[dict]] = None,
     today_nutrition: Optional[dict] = None,
 ) -> dict:
     """
     Call Gemini to generate a detailed session review + next session suggestion.
     When previous_reviews is provided (up to 3), Gemini receives its own past coaching
     outputs for the same workout name, enabling deep continuity ("Coach Memory").
+    previous_tips contains the workout tips the user ACTUALLY saw — these are the
+    authoritative source for "what Coach recommended".
     """
     client = genai.Client(api_key=settings.gemini_api_key)
 
@@ -570,7 +577,9 @@ async def generate_session_review(
     system_prompt = _build_session_review_prompt(profile, lang=language)
     user_message = _build_user_message(yazio_data, hevy_data, today_nutrition=today_nutrition)  # Include nutrition for causality
 
-    # ── Coach Memory: append previous reviews for continuity (up to 3) ──
+    # ── Coach Memory: append previous tips (what user actually saw) + reviews ──
+    if previous_tips:
+        user_message += _format_coaching_memory(previous_tips, memory_type="workout_tips_for_review")
     if previous_reviews:
         user_message += _format_coaching_memory(previous_reviews, memory_type="session_review")
 
@@ -911,6 +920,24 @@ def _format_coaching_memory(previous_data_list: list[dict], memory_type: str = "
     Most recent session gets FULL detail; older sessions are ultra-compact (one line per exercise).
     """
     count = len(previous_data_list)
+
+    if memory_type == "workout_tips_for_review":
+        # Special section: the actual targets the user saw in the app
+        parts: list[str] = [f"\n\n=== WORKOUT TIPS THE USER ACTUALLY SAW ({count} session{'s' if count != 1 else ''}) ==="]
+        parts.append("⚠️ THESE are the targets the user received in the app. Use ONLY these when checking if they followed your advice.\n")
+        for idx, tips_data in enumerate(previous_data_list):
+            label = "Most recent tips" if idx == 0 else f"{idx + 1} sessions ago"
+            parts.append(f"--- {label} ---")
+            for et in tips_data.get("exercise_targets", []):
+                set_targets = et.get("set_targets", [])
+                sets_str = ", ".join(
+                    f"{s.get('weight_kg', '?')}kg×{s.get('reps', '?')}"
+                    for s in set_targets
+                )
+                parts.append(f"  • {et.get('name', '?')}: [{sets_str}]")
+            parts.append("")
+        return "\n".join(parts)
+
     parts: list[str] = [f"\n\n=== YOUR PREVIOUS COACHING ({count} session{'s' if count != 1 else ''}) ==="]
     parts.append("(Reference your past targets. Praise if followed, adjust if not.)\n")
 

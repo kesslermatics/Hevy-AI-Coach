@@ -213,51 +213,59 @@ async def get_session_review(
     db: Session = Depends(get_db),
 ):
     """
-    Session review — tries to return a pre-generated review from the DB first.
-    If none exists, falls back to a live Gemini call (and saves the result).
-    Marks the review as read.
+    Session review — always generated live via Gemini so the user gets fresh analysis.
+    The result is saved to the DB for coaching memory in future reviews.
     """
-    # Try DB first (most recent unread or any recent)
-    review = (
+    context = await gather_user_context(current_user)
+
+    # Find the latest WorkoutReview row (may have tips_data but no review_data yet)
+    latest_review_row = (
         db.query(WorkoutReview)
         .filter(WorkoutReview.user_id == current_user.id)
         .order_by(WorkoutReview.workout_date.desc())
         .first()
     )
 
-    if review and review.review_data:
-        # Mark as read
-        if not review.is_read:
-            review.is_read = True
-            db.commit()
-        return review.review_data
-
-    # Fallback: generate live (for users who just signed up or have no reviews yet)
-    context = await gather_user_context(current_user)
-
-    # Still try to include coaching memory for fallback generation
+    # Coaching memory: previous reviews + tips for the same workout name
     previous_review_list = []
+    previous_tips_list = []
+    latest_workout_name = ""
+
     if context.get("hevy") and len(context["hevy"]) > 0:
         latest_workout_name = context["hevy"][0].get("title", "")
-        if latest_workout_name:
-            prev_reviews = (
-                db.query(WorkoutReview)
-                .filter(
-                    WorkoutReview.user_id == current_user.id,
-                    WorkoutReview.workout_name == latest_workout_name,
-                )
-                .order_by(WorkoutReview.workout_date.desc())
-                .limit(3)
-                .all()
+
+    if latest_workout_name:
+        prev_reviews = (
+            db.query(WorkoutReview)
+            .filter(
+                WorkoutReview.user_id == current_user.id,
+                WorkoutReview.workout_name == latest_workout_name,
             )
-            previous_review_list = [r.review_data for r in prev_reviews if r.review_data]
+            .order_by(WorkoutReview.workout_date.desc())
+            .limit(3)
+            .all()
+        )
+        previous_review_list = [r.review_data for r in prev_reviews if r.review_data]
+        previous_tips_list = [r.tips_data for r in prev_reviews if r.tips_data]
 
     result = await generate_session_review(
         yazio_data=context["yazio"],
         hevy_data=context["hevy"],
         language=current_user.language or "de",
         previous_reviews=previous_review_list,
+        previous_tips=previous_tips_list,
     )
+
+    # Save the review to the WorkoutReview row for coaching memory
+    if latest_review_row and not latest_review_row.review_data:
+        latest_review_row.review_data = result
+        latest_review_row.is_read = True
+        db.commit()
+    elif latest_review_row:
+        # Already has review_data — update it with the fresh one
+        latest_review_row.review_data = result
+        latest_review_row.is_read = True
+        db.commit()
 
     return result
 

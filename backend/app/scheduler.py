@@ -1,6 +1,8 @@
 """
 Background scheduler – generates morning briefings for all active users at 04:00 AM
-and checks for new Hevy workouts every hour to auto-generate session reviews.
+and checks for new Hevy workouts every hour to pre-generate workout tips.
+
+Session reviews are always generated live when the user opens them.
 
 Uses APScheduler with AsyncIOScheduler so it runs inside the same event loop
 as FastAPI / uvicorn.
@@ -18,7 +20,7 @@ from app.database import SessionLocal
 from app.models import User, MorningBriefing, WorkoutReview, WeightEntry
 from app.encryption import decrypt_value
 from app.services.aggregator import gather_user_context
-from app.services.ai_service import generate_daily_briefing, generate_session_review, generate_workout_tips
+from app.services.ai_service import generate_daily_briefing, generate_workout_tips
 from app.services.hevy_service import fetch_routines
 
 logger = logging.getLogger(__name__)
@@ -83,14 +85,14 @@ async def _generate_for_user(user: User, db: Session) -> bool:
 
 async def _generate_workout_review_for_user(user: User, db: Session, max_new_reviews: int = 3) -> int:
     """
-    Check for new Hevy workouts and generate AI reviews for any that don't have one yet.
-    Also looks up the last review for the same workout name to provide coaching memory.
-    Returns the number of new reviews generated.
+    Check for new Hevy workouts and pre-generate workout tips for any that don't have one yet.
+    Session reviews are NOT generated here — they are created live when the user opens them.
+    Returns the number of new tip sets generated.
 
     Args:
-        max_new_reviews: Maximum number of NEW reviews to generate in one run.
+        max_new_reviews: Maximum number of NEW tips to generate in one run.
                          Scheduler uses 3 (conservative), manual trigger uses 5.
-                         Already-reviewed workouts are always skipped (zero tokens).
+                         Already-processed workouts are always skipped (zero tokens).
     """
     from app.encryption import decrypt_value
     from app.services.hevy_service import fetch_recent_workouts
@@ -137,7 +139,7 @@ async def _generate_workout_review_for_user(user: User, db: Session, max_new_rev
         except Exception:
             workout_dt = datetime.utcnow()
 
-        # ── Coach Memory: Find the last 3 reviews for the same workout name ──
+        # ── Coach Memory: Find the last 3 tips for the same workout name ──
         previous_reviews = (
             db.query(WorkoutReview)
             .filter(
@@ -149,20 +151,11 @@ async def _generate_workout_review_for_user(user: User, db: Session, max_new_rev
             .all()
         )
         previous_tips_list = [r.tips_data for r in previous_reviews if r.tips_data]
-        previous_review_list = [r.review_data for r in previous_reviews if r.review_data]
 
         try:
             # Gather full context (nutrition + workouts)
             context = await gather_user_context(user)
             lang = user.language or "de"
-
-            # Generate session review (with coaching memory — last 3)
-            review_data = await generate_session_review(
-                yazio_data=context["yazio"],
-                hevy_data=context["hevy"],
-                language=lang,
-                previous_reviews=previous_review_list,
-            )
 
             # Fetch routine template for definitive exercise list
             routine_exercises = None
@@ -178,7 +171,7 @@ async def _generate_workout_review_for_user(user: User, db: Session, max_new_rev
                 except Exception as exc:
                     logger.warning("Failed to fetch routines in scheduler: %s", exc)
 
-            # Generate workout tips (with coaching memory — last 3)
+            # Generate workout tips only (session reviews are generated live on demand)
             tips_data = await generate_workout_tips(
                 yazio_data=context["yazio"],
                 hevy_data=workouts,
@@ -188,24 +181,24 @@ async def _generate_workout_review_for_user(user: User, db: Session, max_new_rev
                 routine_exercises=routine_exercises,
             )
 
-            # Save to DB
+            # Save to DB (review_data=None — generated live when user opens it)
             review = WorkoutReview(
                 user_id=user.id,
                 hevy_workout_id=str(hevy_id),
                 workout_name=workout_name,
                 workout_date=workout_dt,
-                review_data=review_data,
+                review_data=None,
                 tips_data=tips_data,
                 is_read=False,
             )
             db.add(review)
             db.commit()
             generated += 1
-            logger.info("✅ Workout review generated for %s — %s (%s)", user.username, workout_name, hevy_id)
+            logger.info("✅ Workout tips generated for %s — %s (%s)", user.username, workout_name, hevy_id)
 
         except Exception as exc:
             db.rollback()
-            logger.error("❌ Failed to generate workout review for %s workout %s: %s", user.username, hevy_id, exc)
+            logger.error("❌ Failed to generate workout tips for %s workout %s: %s", user.username, hevy_id, exc)
 
         # Small delay between AI calls to avoid rate-limits
         await asyncio.sleep(2)
@@ -253,7 +246,8 @@ async def daily_briefing_job():
 async def workout_review_job():
     """
     Hourly job – checks all active users for new Hevy workouts
-    and auto-generates AI session reviews + tips in the background.
+    and pre-generates workout tips in the background.
+    Session reviews are generated live on demand.
     """
     logger.info("🏋️ Starting workout review check…")
 
